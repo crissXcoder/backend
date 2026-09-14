@@ -6,6 +6,9 @@ import { SupabaseJwtService } from './services/supabase-jwt.service.js';
 import { AuthGuard } from './guards/auth.guard.js';
 import { RolesGuard } from './guards/roles.guard.js';
 import { RlsTransactionInterceptor } from './interceptors/rls-transaction.interceptor.js';
+import { RolesService } from './services/roles.service.js';
+import { InvitationsService } from './services/invitations.service.js';
+import { AuditAuthService } from './services/audit-auth.service.js';
 
 @Module({
   imports: [ConfigModule],
@@ -15,6 +18,9 @@ import { RlsTransactionInterceptor } from './interceptors/rls-transaction.interc
     AuthGuard,
     RolesGuard,
     RlsTransactionInterceptor,
+    RolesService,
+    InvitationsService,
+    AuditAuthService,
     // Configuración Global (Opción A aprobada: Secure by Default):
     // 1. Todas las rutas se protegen con AuthGuard a menos que lleven @Public()
     {
@@ -37,6 +43,9 @@ import { RlsTransactionInterceptor } from './interceptors/rls-transaction.interc
     AuthGuard,
     RolesGuard,
     RlsTransactionInterceptor,
+    RolesService,
+    InvitationsService,
+    AuditAuthService,
   ],
 })
 export class AuthModule {}
