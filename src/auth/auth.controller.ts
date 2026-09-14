@@ -1,10 +1,21 @@
-import { Controller, Get, Req, UnauthorizedException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Req,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { CurrentUser } from './decorators/current-user.decorator.js';
+import { Roles } from './decorators/roles.decorator.js';
 import type { RequestWithRls } from './interceptors/rls-transaction.interceptor.js';
 import type {
   AuthenticatedUser,
   UserProfileResponse,
 } from './interfaces/authenticated-user.interface.js';
+import { InviteUserDto } from './dto/invite-user.dto.js';
+import { ConfirmInvitationDto } from './dto/confirm-invitation.dto.js';
+import { InvitationsService } from './services/invitations.service.js';
 
 interface UsuarioRow {
   nombre_completo: string;
@@ -13,6 +24,8 @@ interface UsuarioRow {
 
 @Controller('auth')
 export class AuthController {
+  constructor(private readonly invitationsService: InvitationsService) {}
+
   /**
    * GET /auth/perfil
    * Devuelve los datos de identidad y pertenencia a la finca del usuario autenticado.
@@ -60,4 +73,40 @@ export class AuthController {
       correo,
     };
   }
+
+  /**
+   * POST /auth/invitar
+   * Solo accesible por Propietario o Administrador de la finca.
+   * Envía invitación por correo fijando el rol predefinido.
+   */
+  @Post('invitar')
+  @Roles('propietario', 'administrador')
+  async invitarUsuario(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: InviteUserDto,
+    @Req() req: RequestWithRls,
+  ): Promise<{ success: boolean; invitacionId: string; rolAsignado: string }> {
+    return this.invitationsService.inviteUser(user, dto, req.entityManager);
+  }
+
+  /**
+   * POST /auth/confirmar-invitacion
+   * Confirma la invitación para un usuario autenticado recién registrado.
+   * Aplica el rol predefinido por el propietario desestimando cualquier rol inyectado.
+   */
+  @Post('confirmar-invitacion')
+  async confirmarInvitacion(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ConfirmInvitationDto,
+    @Req() req: RequestWithRls,
+  ): Promise<{ success: boolean; userId: string; rolFinal: string }> {
+    return this.invitationsService.confirmInvitation(
+      user.userId,
+      user.tenantId,
+      user.email,
+      dto as unknown as Record<string, unknown>,
+      req.entityManager,
+    );
+  }
 }
+
