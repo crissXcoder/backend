@@ -24,7 +24,8 @@
     "migration:run": "tsx --env-file=.env node_modules/typeorm/cli.js migration:run --dataSource src/database/data-source.ts",
     "migration:revert": "tsx --env-file=.env node_modules/typeorm/cli.js migration:revert --dataSource src/database/data-source.ts",
     "migration:show": "tsx --env-file=.env node_modules/typeorm/cli.js migration:show --dataSource src/database/data-source.ts",
-    "seed:dev": "tsx --env-file=.env src/database/scripts/seed-dev.ts"
+    "seed:dev": "tsx --env-file=.env src/database/scripts/seed-dev.ts",
+    "seed:sanitary": "tsx --env-file=.env src/database/scripts/seed-sanitary.ts"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",
@@ -32,6 +33,7 @@
     "@nestjs/core": "^12.0.1",
     "@nestjs/mapped-types": "*",
     "@nestjs/platform-express": "^12.0.1",
+    "@nestjs/swagger": "^12.0.1",
     "@nestjs/typeorm": "^12.0.1",
     "@supabase/supabase-js": "^2.116.0",
     "class-transformer": "^0.5.1",

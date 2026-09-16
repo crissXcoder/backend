@@ -5,11 +5,11 @@ import { AppService } from './app.service.js';
 import { AuthModule } from './auth/auth.module.js';
 import { CatalogosModule } from './catalogos/catalogos.module.js';
 import { AnimalesModule } from './animales/animales.module.js';
-
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { PesajesModule } from './pesajes/pesajes.module.js';
 import { ServiciosModule } from './servicios/servicios.module.js';
 import { TratamientosModule } from './tratamientos/tratamientos.module.js';
+import { SanitaryModule } from './sanitary/sanitary.module.js';
 
 @Module({
   imports: [
@@ -33,6 +33,7 @@ import { TratamientosModule } from './tratamientos/tratamientos.module.js';
     PesajesModule,
     ServiciosModule,
     TratamientosModule,
+    SanitaryModule,
   ],
   controllers: [AppController],
   providers: [AppService],
