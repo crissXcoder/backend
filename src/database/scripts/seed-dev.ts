@@ -273,6 +273,49 @@ async function runSeed() {
     });
   }
 
+  // 6.5 Insertar Catálogo de Razas y Animales de Prueba
+  console.log(`\n--- Paso 3: Insertando catálogo de razas y animales ---`);
+  if (tenantId) {
+    const razas = [
+      { nombre: 'Holstein', dias_gestacion: 281 },
+      { nombre: 'Jersey', dias_gestacion: 279 },
+      { nombre: 'Pardo Suizo', dias_gestacion: 290 },
+      { nombre: 'Brahman', dias_gestacion: 293 },
+      { nombre: 'Nelore', dias_gestacion: 293 },
+      { nombre: 'Girolando', dias_gestacion: 290 },
+      { nombre: 'Criolla', dias_gestacion: 283 },
+      { nombre: 'Mestiza', dias_gestacion: 283 },
+      { nombre: 'Otra', dias_gestacion: 283 },
+    ];
+
+    for (const raza of razas) {
+      const { data: existing } = await supabaseAdmin.from('catalogo_raza').select('id').eq('nombre', raza.nombre).maybeSingle();
+      if (!existing) {
+         await supabaseAdmin.from('catalogo_raza').insert({ nombre: raza.nombre, dias_gestacion: raza.dias_gestacion });
+      }
+    }
+    console.log('✅ Catálogo de razas verificado/insertado.');
+
+    const { data: holstein } = await supabaseAdmin.from('catalogo_raza').select('id').eq('nombre', 'Holstein').maybeSingle();
+    const { data: brahman } = await supabaseAdmin.from('catalogo_raza').select('id').eq('nombre', 'Brahman').maybeSingle();
+
+    if (holstein && brahman) {
+      const animales = [
+        { tenant_id: tenantId, nombre: 'Lola', arete_interno: '101', sexo: 'Hembra', raza_id: holstein.id, categoria: 'Vaca en Ordeño', activo: true },
+        { tenant_id: tenantId, nombre: 'Manchas', arete_interno: '102', sexo: 'Hembra', raza_id: holstein.id, categoria: 'Vaca Seca', activo: true },
+        { tenant_id: tenantId, nombre: 'Toro Max', arete_interno: '103', sexo: 'Macho', raza_id: brahman.id, categoria: 'Semental/Reproductor', activo: true }
+      ];
+
+      for (const animal of animales) {
+        const { data: existingAnimal } = await supabaseAdmin.from('animal').select('id').eq('tenant_id', tenantId).eq('arete_interno', animal.arete_interno).maybeSingle();
+        if (!existingAnimal) {
+          await supabaseAdmin.from('animal').insert(animal);
+        }
+      }
+      console.log('✅ Animales de prueba verificados/insertados.');
+    }
+  }
+
   // 7. Cerrar conexión a base de datos si fue abierta
   if (dataSource?.isInitialized) {
     await dataSource.destroy();
