@@ -42,6 +42,7 @@ export class CreateAnimalAndCatalogo1789499441409 implements MigrationInterface 
             ALTER TABLE animal ENABLE ROW LEVEL SECURITY;
 
             -- Políticas de seguridad para animal (aislamiento por tenant)
+            DROP POLICY IF EXISTS tenant_isolation_policy ON animal;
             CREATE POLICY tenant_isolation_policy ON animal
                 USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
         `);

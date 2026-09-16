@@ -2,12 +2,15 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Animal } from './entities/animal.entity.js';
+import { DocumentoAnimal } from './entities/documento-animal.entity.js';
 
 @Injectable()
 export class AnimalesService {
   constructor(
     @InjectRepository(Animal)
     private readonly animalRepository: Repository<Animal>,
+    @InjectRepository(DocumentoAnimal)
+    private readonly documentoRepository: Repository<DocumentoAnimal>,
   ) {}
 
   async findAll(tenantId: string, query: any) {
@@ -35,7 +38,7 @@ export class AnimalesService {
   async findOne(id: string, tenantId: string) {
     const animal = await this.animalRepository.findOne({
       where: { id, tenantId },
-      relations: ['raza', 'madre', 'padre'],
+      relations: { raza: true, madre: true, padre: true },
     });
 
     if (!animal) {
@@ -46,9 +49,18 @@ export class AnimalesService {
   }
 
   async create(tenantId: string, createAnimalDto: any) {
+    // Sanitizar campos vacíos que causan error en la base de datos
+    const payload = { ...createAnimalDto };
+    if (payload.madreId === '') payload.madreId = null;
+    if (payload.padreId === '') payload.padreId = null;
+    if (payload.pesoActualKg === '') payload.pesoActualKg = null;
+    if (payload.valorCompraCrc === '') payload.valorCompraCrc = null;
+    if (payload.fechaNacimiento === '') payload.fechaNacimiento = null;
+    if (payload.fechaCompra === '') payload.fechaCompra = null;
+
     try {
       const animal = this.animalRepository.create({
-        ...createAnimalDto,
+        ...payload,
         tenantId,
       });
       return await this.animalRepository.save(animal);
@@ -61,8 +73,16 @@ export class AnimalesService {
   }
 
   async update(id: string, tenantId: string, updateAnimalDto: any) {
+    const payload = { ...updateAnimalDto };
+    if (payload.madreId === '') payload.madreId = null;
+    if (payload.padreId === '') payload.padreId = null;
+    if (payload.pesoActualKg === '') payload.pesoActualKg = null;
+    if (payload.valorCompraCrc === '') payload.valorCompraCrc = null;
+    if (payload.fechaNacimiento === '') payload.fechaNacimiento = null;
+    if (payload.fechaCompra === '') payload.fechaCompra = null;
+
     const animal = await this.findOne(id, tenantId);
-    this.animalRepository.merge(animal, updateAnimalDto);
+    this.animalRepository.merge(animal, payload);
     
     try {
       return await this.animalRepository.save(animal);
@@ -89,5 +109,29 @@ export class AnimalesService {
     animal.pesoFinalKg = bajaDto.pesoFinalKg;
 
     return await this.animalRepository.save(animal);
+  }
+
+  async getDocumentos(animalId: string, tenantId: string) {
+    // Verificar que el animal existe y pertenece al tenant
+    await this.findOne(animalId, tenantId);
+    
+    return this.documentoRepository.find({
+      where: { animalId, tenantId },
+      order: { createdAt: 'DESC' }
+    });
+  }
+
+  async createDocumento(animalId: string, tenantId: string, docDto: any) {
+    // Verificar que el animal existe y pertenece al tenant
+    await this.findOne(animalId, tenantId);
+
+    const doc = this.documentoRepository.create({
+      tenantId,
+      animalId,
+      tipo: docDto.tipo,
+      archivoUrl: docDto.archivoUrl,
+    });
+    
+    return this.documentoRepository.save(doc);
   }
 }

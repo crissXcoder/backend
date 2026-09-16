@@ -35,6 +35,9 @@ export class Animal {
   @Column({ type: 'text' })
   categoria: string;
 
+  @Column({ type: 'text', nullable: true })
+  potrero: string | null;
+
   @Column({ name: 'fecha_nacimiento', type: 'date', nullable: true })
   fechaNacimiento: string | null; // Date as string 'YYYY-MM-DD'
 
@@ -74,10 +77,35 @@ export class Animal {
   motivoBaja: string | null;
 
   @Column({ name: 'precio_venta_crc', type: 'numeric', precision: 12, scale: 2, nullable: true })
-  precioVentaCrc: number | null;
+  precioVentaCrc?: number;
 
   @Column({ name: 'peso_final_kg', type: 'numeric', precision: 6, scale: 1, nullable: true })
-  pesoFinalKg: number | null;
+  pesoFinalKg?: number;
+
+  // Nuevos campos de compra/origen
+  @Column({ name: 'origen', type: 'text', nullable: true })
+  origen?: 'Finca' | 'Externa';
+
+  @Column({ name: 'comprado_a', type: 'text', nullable: true })
+  compradoA?: string;
+
+  @Column({ name: 'fecha_compra', type: 'date', nullable: true })
+  fechaCompra?: string;
+
+  @Column({ name: 'valor_compra_crc', type: 'numeric', precision: 12, scale: 2, nullable: true })
+  valorCompraCrc?: number;
+
+  @Column({ name: 'numero_guia', type: 'text', nullable: true })
+  numeroGuia?: string;
+
+  @Column({ name: 'metodo_compra', type: 'text', nullable: true })
+  metodoCompra?: 'Sinpe' | 'Depósito' | 'Efectivo' | 'Combinado';
+
+  @Column({ name: 'metodos_combinados', type: 'text', array: true, nullable: true })
+  metodosCombinados?: string[];
+
+  @Column({ name: 'referencia_pago', type: 'text', nullable: true })
+  referenciaPago?: string;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
