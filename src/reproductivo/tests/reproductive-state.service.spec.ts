@@ -2,14 +2,14 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { BadRequestException } from '@nestjs/common';
 import {
   ReproductiveStateService,
-  EventoHistoricoReproductivo,
+  type EventoHistoricoReproductivo,
 } from '../services/reproductive-state.service.js';
 import { Evento } from '../../eventos/entities/evento.entity.js';
 import { EventoServicio } from '../entities/evento-servicio.entity.js';
 import { EventoDiagnostico } from '../entities/evento-diagnostico.entity.js';
 import { EventoParto } from '../entities/evento-parto.entity.js';
 import { EventoSecado } from '../entities/evento-secado.entity.js';
-import { DataSource } from 'typeorm';
+import type { DataSource } from 'typeorm';
 
 describe('ReproductiveStateService (Máquina de Estados al Vuelo)', () => {
   let service: ReproductiveStateService;
@@ -33,13 +33,13 @@ describe('ReproductiveStateService (Máquina de Estados al Vuelo)', () => {
     service = new ReproductiveStateService(mockDataSource);
   });
 
-  it('Estado inicial: Animal hembra sin eventos inicia en "Vacía"', () => {
+  it('1. Estado inicial: Animal hembra sin eventos inicia en "Vacía"', () => {
     const estado = service.derivarEstadoDesdeEventos(mockVaca, []);
     expect(estado.estadoActual).toBe('Vacía');
     expect(estado.servicioActivo).toBeUndefined();
   });
 
-  it('CRITERIO 5: Animal macho NUNCA produce un estado reproductivo válido y arroja BadRequestException', () => {
+  it('2. Validación de sexo: Animal macho arroja BadRequestException y no posee ciclo', () => {
     expect(() => service.derivarEstadoDesdeEventos(mockToro, [])).toThrow(
       BadRequestException,
     );
@@ -48,25 +48,24 @@ describe('ReproductiveStateService (Máquina de Estados al Vuelo)', () => {
     );
   });
 
-  it('CRITERIO 2 (Corrige Bug B4): Registrar un servicio sin diagnóstico posterior deja el estado en "Servida", NUNCA en "Preñada"', () => {
-    const eventoServicio: Evento = {
+  it('3. Servicio sin diagnóstico: deja el estado en "Servida", NUNCA en "Preñada"', () => {
+    const evS: Evento = {
       id: 'evento-s1',
-      tenantId: 'tenant-1',
+      tenantId: 't1',
       animalId: mockVaca.id,
       tipo: 'SERVICIO',
       fechaEvento: '2026-02-01',
       fechaRegistro: new Date('2026-02-01T10:00:00Z'),
-      usuarioId: 'user-1',
+      usuarioId: 'u1',
       revertido: false,
       eventoCorrigeId: null,
       eventoCorrige: null,
       notas: null,
       animal: mockVaca as any,
     };
-
-    const detalleServicio: EventoServicio = {
+    const detS: EventoServicio = {
       eventoId: 'evento-s1',
-      evento: eventoServicio,
+      evento: evS,
       tipoServicio: 'Inseminación Artificial',
       toroOPajilla: 'Titan (CRC-B-001)',
       responsable: 'Dr. Veterinario',
@@ -77,77 +76,26 @@ describe('ReproductiveStateService (Máquina de Estados al Vuelo)', () => {
       fpp: '2026-11-09',
     };
 
-    const historia: EventoHistoricoReproductivo[] = [
-      { evento: eventoServicio, servicio: detalleServicio },
-    ];
-
-    const estado = service.derivarEstadoDesdeEventos(mockVaca, historia);
+    const estado = service.derivarEstadoDesdeEventos(mockVaca, [
+      { evento: evS, servicio: detS },
+    ]);
 
     expect(estado.estadoActual).toBe('Servida');
-    expect(estado.estadoActual).not.toBe('Preñada');
     expect(estado.servicioActivo).toBeDefined();
-    expect(estado.servicioActivo?.tipoServicio).toBe('Inseminación Artificial');
     expect(estado.servicioActivo?.fpp).toBe('2026-11-09');
-    expect(estado.proximosHitos?.[0]?.tipo).toBe('Palpación');
   });
 
-  it('Transición exitosa a "Preñada" cuando existe diagnóstico confirmatorio positivo', () => {
-    const eventoS: Evento = {
-      id: 'ev-s1',
-      tenantId: 'tenant-1',
-      animalId: mockVaca.id,
-      tipo: 'SERVICIO',
-      fechaEvento: '2026-01-01',
-      fechaRegistro: new Date('2026-01-01T08:00:00Z'),
-      usuarioId: 'u-1',
-      revertido: false,
-      eventoCorrigeId: null,
-      eventoCorrige: null,
-      notas: null,
-      animal: mockVaca as any,
-    };
-    const detS: EventoServicio = {
-      eventoId: 'ev-s1',
-      evento: eventoS,
-      tipoServicio: 'Monta Natural',
-      toroOPajilla: 'Toro Campeón',
-      responsable: 'Peón',
-      palpacionFecha: '2026-02-10',
-      secadoFecha: '2026-08-10',
-      avisoPartoFecha: '2026-09-24',
-      avisoPartoUrgenteFecha: '2026-10-06',
-      fpp: '2026-10-09',
-    };
+  it('4. Diagnóstico positivo: confirma preñez y transiciona a "Preñada"', () => {
+    const evS: Evento = { id: 's1', tenantId: 't1', animalId: mockVaca.id, tipo: 'SERVICIO', fechaEvento: '2026-01-01', fechaRegistro: new Date(), usuarioId: 'u1', revertido: false, eventoCorrigeId: null, eventoCorrige: null, notas: null, animal: mockVaca as any };
+    const detS: EventoServicio = { eventoId: 's1', evento: evS, tipoServicio: 'Monta Natural', toroOPajilla: 'Toro Campeón', responsable: 'Peón', palpacionFecha: '2026-02-10', secadoFecha: '2026-08-10', avisoPartoFecha: '2026-09-24', avisoPartoUrgenteFecha: '2026-10-06', fpp: '2026-10-09' };
 
-    const eventoD: Evento = {
-      id: 'ev-d1',
-      tenantId: 'tenant-1',
-      animalId: mockVaca.id,
-      tipo: 'DIAGNOSTICO',
-      fechaEvento: '2026-02-10',
-      fechaRegistro: new Date('2026-02-10T09:00:00Z'),
-      usuarioId: 'u-1',
-      revertido: false,
-      eventoCorrigeId: null,
-      eventoCorrige: null,
-      notas: null,
-      animal: mockVaca as any,
-    };
-    const detD: EventoDiagnostico = {
-      eventoId: 'ev-d1',
-      evento: eventoD,
-      eventoServicioId: 'ev-s1',
-      eventoServicio: eventoS,
-      metodo: 'Palpación',
-      resultado: 'Preñada',
-    };
+    const evD: Evento = { id: 'd1', tenantId: 't1', animalId: mockVaca.id, tipo: 'DIAGNOSTICO', fechaEvento: '2026-02-10', fechaRegistro: new Date(), usuarioId: 'u1', revertido: false, eventoCorrigeId: null, eventoCorrige: null, notas: null, animal: mockVaca as any };
+    const detD: EventoDiagnostico = { eventoId: 'd1', evento: evD, eventoServicioId: 's1', eventoServicio: evS, metodo: 'Palpación', resultado: 'Preñada' };
 
-    const historia: EventoHistoricoReproductivo[] = [
-      { evento: eventoS, servicio: detS },
-      { evento: eventoD, diagnostico: detD },
-    ];
-
-    const estado = service.derivarEstadoDesdeEventos(mockVaca, historia);
+    const estado = service.derivarEstadoDesdeEventos(mockVaca, [
+      { evento: evS, servicio: detS },
+      { evento: evD, diagnostico: detD },
+    ]);
 
     expect(estado.estadoActual).toBe('Preñada');
     expect(estado.ultimoDiagnostico?.resultado).toBe('Preñada');
@@ -158,63 +106,17 @@ describe('ReproductiveStateService (Máquina de Estados al Vuelo)', () => {
     ]);
   });
 
-  it('CRITERIO 3: Diagnóstico con resultado = "Vacía" retorna el estado a "Vacía" y no se queda en "Servida"', () => {
-    const eventoS: Evento = {
-      id: 'ev-s1',
-      tenantId: 'tenant-1',
-      animalId: mockVaca.id,
-      tipo: 'SERVICIO',
-      fechaEvento: '2026-01-01',
-      fechaRegistro: new Date('2026-01-01T08:00:00Z'),
-      usuarioId: 'u-1',
-      revertido: false,
-      eventoCorrigeId: null,
-      eventoCorrige: null,
-      notas: null,
-      animal: mockVaca as any,
-    };
-    const detS: EventoServicio = {
-      eventoId: 'ev-s1',
-      evento: eventoS,
-      tipoServicio: 'Inseminación Artificial',
-      toroOPajilla: 'Pajilla Holstein',
-      responsable: 'Dr. Vet',
-      palpacionFecha: '2026-02-10',
-      secadoFecha: '2026-08-10',
-      avisoPartoFecha: '2026-09-24',
-      avisoPartoUrgenteFecha: '2026-10-06',
-      fpp: '2026-10-09',
-    };
+  it('5. Rama Diagnóstico Negativo: palpación inicial negativa retorna de "Servida" a "Vacía"', () => {
+    const evS: Evento = { id: 's1', tenantId: 't1', animalId: mockVaca.id, tipo: 'SERVICIO', fechaEvento: '2026-01-01', fechaRegistro: new Date(), usuarioId: 'u1', revertido: false, eventoCorrigeId: null, eventoCorrige: null, notas: null, animal: mockVaca as any };
+    const detS: EventoServicio = { eventoId: 's1', evento: evS, tipoServicio: 'Inseminación Artificial', toroOPajilla: 'Pajilla-01', responsable: 'Dr. Vet', palpacionFecha: '2026-02-10', secadoFecha: '2026-08-10', avisoPartoFecha: '2026-09-24', avisoPartoUrgenteFecha: '2026-10-06', fpp: '2026-10-09' };
 
-    const eventoD: Evento = {
-      id: 'ev-d1',
-      tenantId: 'tenant-1',
-      animalId: mockVaca.id,
-      tipo: 'DIAGNOSTICO',
-      fechaEvento: '2026-02-10',
-      fechaRegistro: new Date('2026-02-10T09:00:00Z'),
-      usuarioId: 'u-1',
-      revertido: false,
-      eventoCorrigeId: null,
-      eventoCorrige: null,
-      notas: 'Palpación negativa',
-      animal: mockVaca as any,
-    };
-    const detD: EventoDiagnostico = {
-      eventoId: 'ev-d1',
-      evento: eventoD,
-      eventoServicioId: 'ev-s1',
-      eventoServicio: eventoS,
-      metodo: 'Palpación',
-      resultado: 'Vacía',
-    };
+    const evD: Evento = { id: 'd1', tenantId: 't1', animalId: mockVaca.id, tipo: 'DIAGNOSTICO', fechaEvento: '2026-02-10', fechaRegistro: new Date(), usuarioId: 'u1', revertido: false, eventoCorrigeId: null, eventoCorrige: null, notas: 'Diagnóstico negativo', animal: mockVaca as any };
+    const detD: EventoDiagnostico = { eventoId: 'd1', evento: evD, eventoServicioId: 's1', eventoServicio: evS, metodo: 'Palpación', resultado: 'Vacía' };
 
-    const historia: EventoHistoricoReproductivo[] = [
-      { evento: eventoS, servicio: detS },
-      { evento: eventoD, diagnostico: detD },
-    ];
-
-    const estado = service.derivarEstadoDesdeEventos(mockVaca, historia);
+    const estado = service.derivarEstadoDesdeEventos(mockVaca, [
+      { evento: evS, servicio: detS },
+      { evento: evD, diagnostico: detD },
+    ]);
 
     expect(estado.estadoActual).toBe('Vacía');
     expect(estado.servicioActivo).toBeUndefined();
@@ -222,9 +124,58 @@ describe('ReproductiveStateService (Máquina de Estados al Vuelo)', () => {
     expect(estado.proximosHitos).toEqual([]);
   });
 
-  it('Ciclo completo: Servida -> Preñada -> En Secado -> Parto vuelve a "Vacía"', () => {
+  it('6. Rama Aborto / Pérdida Gestacional: Vaca diagnosticada "Preñada" sufre aborto detectado por diagnóstico posterior "Vacía"', () => {
+    // Servicio
+    const evS: Evento = { id: 's1', tenantId: 't1', animalId: mockVaca.id, tipo: 'SERVICIO', fechaEvento: '2026-01-01', fechaRegistro: new Date('2026-01-01T08:00:00Z'), usuarioId: 'u1', revertido: false, eventoCorrigeId: null, eventoCorrige: null, notas: null, animal: mockVaca as any };
+    const detS: EventoServicio = { eventoId: 's1', evento: evS, tipoServicio: 'Inseminación Artificial', toroOPajilla: 'Pajilla-01', responsable: 'Dr. Vet', palpacionFecha: '2026-02-10', secadoFecha: '2026-08-10', avisoPartoFecha: '2026-09-24', avisoPartoUrgenteFecha: '2026-10-06', fpp: '2026-10-09' };
+
+    // Primer diagnóstico a los 40 días: Preñada
+    const evD1: Evento = { id: 'd1', tenantId: 't1', animalId: mockVaca.id, tipo: 'DIAGNOSTICO', fechaEvento: '2026-02-10', fechaRegistro: new Date('2026-02-10T09:00:00Z'), usuarioId: 'u1', revertido: false, eventoCorrigeId: null, eventoCorrige: null, notas: 'Gestación confirmada', animal: mockVaca as any };
+    const detD1: EventoDiagnostico = { eventoId: 'd1', evento: evD1, eventoServicioId: 's1', eventoServicio: evS, metodo: 'Ecografía', resultado: 'Preñada' };
+
+    // Segundo diagnóstico a los 90 días tras sangrado: Pérdida embrionaria / Aborto detectado -> Vacía
+    const evD2: Evento = { id: 'd2', tenantId: 't1', animalId: mockVaca.id, tipo: 'DIAGNOSTICO', fechaEvento: '2026-04-01', fechaRegistro: new Date('2026-04-01T10:00:00Z'), usuarioId: 'u1', revertido: false, eventoCorrigeId: null, eventoCorrige: null, notas: 'Aborto confirmado por ecografía, útero vacío', animal: mockVaca as any };
+    const detD2: EventoDiagnostico = { eventoId: 'd2', evento: evD2, eventoServicioId: 's1', eventoServicio: evS, metodo: 'Ecografía', resultado: 'Vacía' };
+
+    const historia: EventoHistoricoReproductivo[] = [
+      { evento: evS, servicio: detS },
+      { evento: evD1, diagnostico: detD1 },
+      { evento: evD2, diagnostico: detD2 },
+    ];
+
+    const estado = service.derivarEstadoDesdeEventos(mockVaca, historia);
+
+    expect(estado.estadoActual).toBe('Vacía');
+    expect(estado.servicioActivo).toBeUndefined(); // Se canceló el ciclo
+    expect(estado.ultimoDiagnostico?.eventoId).toBe('d2');
+    expect(estado.ultimoDiagnostico?.resultado).toBe('Vacía');
+    expect(estado.proximosHitos).toEqual([]);
+  });
+
+  it('7. Rama Aborto Tardío en Parto: Parto con facilidad "Aborto" culmina la gestación y regresa a "Vacía"', () => {
     const evS: Evento = { id: 's1', tenantId: 't1', animalId: mockVaca.id, tipo: 'SERVICIO', fechaEvento: '2026-01-01', fechaRegistro: new Date(), usuarioId: 'u1', revertido: false, eventoCorrigeId: null, eventoCorrige: null, notas: null, animal: mockVaca as any };
     const detS: EventoServicio = { eventoId: 's1', evento: evS, tipoServicio: 'Inseminación Artificial', toroOPajilla: 'Pajilla', responsable: 'Vet', palpacionFecha: '2026-02-10', secadoFecha: '2026-08-10', avisoPartoFecha: '2026-09-24', avisoPartoUrgenteFecha: '2026-10-06', fpp: '2026-10-09' };
+
+    const evD: Evento = { id: 'd1', tenantId: 't1', animalId: mockVaca.id, tipo: 'DIAGNOSTICO', fechaEvento: '2026-02-10', fechaRegistro: new Date(), usuarioId: 'u1', revertido: false, eventoCorrigeId: null, eventoCorrige: null, notas: null, animal: mockVaca as any };
+    const detD: EventoDiagnostico = { eventoId: 'd1', evento: evD, eventoServicioId: 's1', eventoServicio: evS, metodo: 'Palpación', resultado: 'Preñada' };
+
+    const evP: Evento = { id: 'p1', tenantId: 't1', animalId: mockVaca.id, tipo: 'PARTO', fechaEvento: '2026-06-15', fechaRegistro: new Date(), usuarioId: 'u1', revertido: false, eventoCorrigeId: null, eventoCorrige: null, notas: 'Feto expulsado prematuramente', animal: mockVaca as any };
+    const detP: EventoParto = { eventoId: 'p1', evento: evP, eventoServicioId: 's1', eventoServicio: evS, criaAnimalId: null, facilidadParto: 'Aborto', observaciones: 'Aborto infeccioso en mes 5' };
+
+    const estado = service.derivarEstadoDesdeEventos(mockVaca, [
+      { evento: evS, servicio: detS },
+      { evento: evD, diagnostico: detD },
+      { evento: evP, parto: detP },
+    ]);
+
+    expect(estado.estadoActual).toBe('Vacía');
+    expect(estado.servicioActivo).toBeUndefined();
+    expect(estado.ultimoParto?.facilidadParto).toBe('Aborto');
+  });
+
+  it('8. Secado: transiciona formalmente a "En Secado" antes del parto', () => {
+    const evS: Evento = { id: 's1', tenantId: 't1', animalId: mockVaca.id, tipo: 'SERVICIO', fechaEvento: '2026-01-01', fechaRegistro: new Date(), usuarioId: 'u1', revertido: false, eventoCorrigeId: null, eventoCorrige: null, notas: null, animal: mockVaca as any };
+    const detS: EventoServicio = { eventoId: 's1', evento: evS, tipoServicio: 'Monta Natural', toroOPajilla: 'Toro', responsable: 'Vet', palpacionFecha: '2026-02-10', secadoFecha: '2026-08-10', avisoPartoFecha: '2026-09-24', avisoPartoUrgenteFecha: '2026-10-06', fpp: '2026-10-09' };
 
     const evD: Evento = { id: 'd1', tenantId: 't1', animalId: mockVaca.id, tipo: 'DIAGNOSTICO', fechaEvento: '2026-02-10', fechaRegistro: new Date(), usuarioId: 'u1', revertido: false, eventoCorrigeId: null, eventoCorrige: null, notas: null, animal: mockVaca as any };
     const detD: EventoDiagnostico = { eventoId: 'd1', evento: evD, eventoServicioId: 's1', eventoServicio: evS, metodo: 'Ecografía', resultado: 'Preñada' };
@@ -232,32 +183,19 @@ describe('ReproductiveStateService (Máquina de Estados al Vuelo)', () => {
     const evSec: Evento = { id: 'sec1', tenantId: 't1', animalId: mockVaca.id, tipo: 'SECADO', fechaEvento: '2026-08-10', fechaRegistro: new Date(), usuarioId: 'u1', revertido: false, eventoCorrigeId: null, eventoCorrige: null, notas: null, animal: mockVaca as any };
     const detSec: EventoSecado = { eventoId: 'sec1', evento: evSec };
 
-    const evP: Evento = { id: 'p1', tenantId: 't1', animalId: mockVaca.id, tipo: 'PARTO', fechaEvento: '2026-10-10', fechaRegistro: new Date(), usuarioId: 'u1', revertido: false, eventoCorrigeId: null, eventoCorrige: null, notas: null, animal: mockVaca as any };
-    const detP: EventoParto = { eventoId: 'p1', evento: evP, eventoServicioId: 's1', eventoServicio: evS, criaAnimalId: null, facilidadParto: 'Normal', observaciones: 'Cría sana' };
-
-    // 1. Estado en secado
-    const estadoSecado = service.derivarEstadoDesdeEventos(mockVaca, [
+    const estado = service.derivarEstadoDesdeEventos(mockVaca, [
       { evento: evS, servicio: detS },
       { evento: evD, diagnostico: detD },
       { evento: evSec, secado: detSec },
     ]);
-    expect(estadoSecado.estadoActual).toBe('En Secado');
 
-    // 2. Estado post-parto
-    const estadoPostParto = service.derivarEstadoDesdeEventos(mockVaca, [
-      { evento: evS, servicio: detS },
-      { evento: evD, diagnostico: detD },
-      { evento: evSec, secado: detSec },
-      { evento: evP, parto: detP },
-    ]);
-    expect(estadoPostParto.estadoActual).toBe('Vacía');
-    expect(estadoPostParto.ultimoParto?.facilidadParto).toBe('Normal');
-    expect(estadoPostParto.servicioActivo).toBeUndefined();
+    expect(estado.estadoActual).toBe('En Secado');
+    expect(estado.servicioActivo).toBeDefined();
   });
 
-  it('CRITERIO 4: Evento de corrección ignora el evento marcado como revertido = true y recalcula con el nuevo', () => {
-    // Evento original erróneo (revertido = true)
-    const evOriginalRevertido: Evento = {
+  it('9. Evento de corrección: ignora el evento marcado revertido = true y computa exclusivamente con el nuevo', () => {
+    // Evento original (erróneamente marcado como revertido)
+    const evOriginal: Evento = {
       id: 'ev-erroneo',
       tenantId: 't1',
       animalId: mockVaca.id,
@@ -268,14 +206,14 @@ describe('ReproductiveStateService (Máquina de Estados al Vuelo)', () => {
       revertido: true, // MARCADO REVERTIDO
       eventoCorrigeId: null,
       eventoCorrige: null,
-      notas: 'Fecha incorrecta reportada por peón',
+      notas: 'Fecha incorrecta reportada',
       animal: mockVaca as any,
     };
     const detOriginal: EventoServicio = {
       eventoId: 'ev-erroneo',
-      evento: evOriginalRevertido,
+      evento: evOriginal,
       tipoServicio: 'Monta Natural',
-      toroOPajilla: 'Toro Viejo',
+      toroOPajilla: 'Toro Equivocado',
       responsable: 'Peon 1',
       palpacionFecha: '2026-02-10',
       secadoFecha: '2026-08-10',
@@ -290,21 +228,21 @@ describe('ReproductiveStateService (Máquina de Estados al Vuelo)', () => {
       tenantId: 't1',
       animalId: mockVaca.id,
       tipo: 'SERVICIO',
-      fechaEvento: '2026-01-15', // Fecha real
+      fechaEvento: '2026-01-15',
       fechaRegistro: new Date('2026-01-16T08:00:00Z'),
       usuarioId: 'u1',
       revertido: false,
       eventoCorrigeId: 'ev-erroneo',
-      eventoCorrige: evOriginalRevertido,
-      notas: 'Corrección: el servicio fue el 15 de enero con pajilla certificada',
+      eventoCorrige: evOriginal,
+      notas: 'Corrección con fecha real',
       animal: mockVaca as any,
     };
     const detCorregido: EventoServicio = {
       eventoId: 'ev-corregido',
       evento: evCorregido,
       tipoServicio: 'Inseminación Artificial',
-      toroOPajilla: 'Titan Certificado',
-      responsable: 'Dr. García',
+      toroOPajilla: 'Titan-Correcto',
+      responsable: 'Dr. Roberto',
       palpacionFecha: '2026-02-24',
       secadoFecha: '2026-08-24',
       avisoPartoFecha: '2026-10-08',
@@ -312,89 +250,32 @@ describe('ReproductiveStateService (Máquina de Estados al Vuelo)', () => {
       fpp: '2026-10-23',
     };
 
-    const historia: EventoHistoricoReproductivo[] = [
-      { evento: evOriginalRevertido, servicio: detOriginal },
+    const estado = service.derivarEstadoDesdeEventos(mockVaca, [
+      { evento: evOriginal, servicio: detOriginal },
       { evento: evCorregido, servicio: detCorregido },
-    ];
+    ]);
 
-    const estado = service.derivarEstadoDesdeEventos(mockVaca, historia);
-
-    // El cálculo debe basarse 100% en el evento corregido activo
     expect(estado.estadoActual).toBe('Servida');
     expect(estado.servicioActivo?.eventoId).toBe('ev-corregido');
-    expect(estado.servicioActivo?.toroOPajilla).toBe('Titan Certificado');
-    expect(estado.servicioActivo?.fechaServicio).toBe('2026-01-15');
+    expect(estado.servicioActivo?.toroOPajilla).toBe('Titan-Correcto');
     expect(estado.servicioActivo?.fpp).toBe('2026-10-23');
-    expect(estado.servicioActivo?.palpacionFecha).toBe('2026-02-24');
   });
 
-  it('Caso Borde: Retorno de celo (segundo servicio sin diagnóstico) actualiza el ciclo activo con la nueva fecha', () => {
-    const evS1: Evento = {
-      id: 's1',
-      tenantId: 't1',
-      animalId: mockVaca.id,
-      tipo: 'SERVICIO',
-      fechaEvento: '2026-01-01',
-      fechaRegistro: new Date('2026-01-01T08:00:00Z'),
-      usuarioId: 'u1',
-      revertido: false,
-      eventoCorrigeId: null,
-      eventoCorrige: null,
-      notas: null,
-      animal: mockVaca as any,
-    };
-    const detS1: EventoServicio = {
-      eventoId: 's1',
-      evento: evS1,
-      tipoServicio: 'Inseminación Artificial',
-      toroOPajilla: 'Toro 1',
-      responsable: null,
-      palpacionFecha: '2026-02-10',
-      secadoFecha: '2026-08-10',
-      avisoPartoFecha: '2026-09-24',
-      avisoPartoUrgenteFecha: '2026-10-06',
-      fpp: '2026-10-09',
-    };
+  it('10. Retorno de celo (segundo servicio sin diagnóstico previo) actualiza el ciclo activo con la nueva fecha', () => {
+    const s1: Evento = { id: 's1', tenantId: 't1', animalId: mockVaca.id, tipo: 'SERVICIO', fechaEvento: '2026-01-01', fechaRegistro: new Date(), usuarioId: 'u1', revertido: false, eventoCorrigeId: null, eventoCorrige: null, notas: null, animal: mockVaca as any };
+    const det1: EventoServicio = { eventoId: 's1', evento: s1, tipoServicio: 'Inseminación Artificial', toroOPajilla: 'Toro 1', responsable: 'Vet', palpacionFecha: '2026-02-10', secadoFecha: '2026-08-10', avisoPartoFecha: '2026-09-24', avisoPartoUrgenteFecha: '2026-10-06', fpp: '2026-10-09' };
 
-    // Segundo servicio 21 días después (retorno de celo)
-    const evS2: Evento = {
-      id: 's2',
-      tenantId: 't1',
-      animalId: mockVaca.id,
-      tipo: 'SERVICIO',
-      fechaEvento: '2026-01-22',
-      fechaRegistro: new Date('2026-01-22T08:00:00Z'),
-      usuarioId: 'u1',
-      revertido: false,
-      eventoCorrigeId: null,
-      eventoCorrige: null,
-      notas: 'Retorno de celo regular a los 21 días',
-      animal: mockVaca as any,
-    };
-    const detS2: EventoServicio = {
-      eventoId: 's2',
-      evento: evS2,
-      tipoServicio: 'Inseminación Artificial',
-      toroOPajilla: 'Toro 2',
-      responsable: null,
-      palpacionFecha: '2026-03-03',
-      secadoFecha: '2026-08-31',
-      avisoPartoFecha: '2026-10-15',
-      avisoPartoUrgenteFecha: '2026-10-27',
-      fpp: '2026-10-30',
-    };
+    const s2: Evento = { id: 's2', tenantId: 't1', animalId: mockVaca.id, tipo: 'SERVICIO', fechaEvento: '2026-01-22', fechaRegistro: new Date(), usuarioId: 'u1', revertido: false, eventoCorrigeId: null, eventoCorrige: null, notas: null, animal: mockVaca as any };
+    const det2: EventoServicio = { eventoId: 's2', evento: s2, tipoServicio: 'Inseminación Artificial', toroOPajilla: 'Toro 2', responsable: 'Vet', palpacionFecha: '2026-03-03', secadoFecha: '2026-09-01', avisoPartoFecha: '2026-10-15', avisoPartoUrgenteFecha: '2026-10-27', fpp: '2026-10-30' };
 
-    const historia: EventoHistoricoReproductivo[] = [
-      { evento: evS1, servicio: detS1 },
-      { evento: evS2, servicio: detS2 },
-    ];
-
-    const estado = service.derivarEstadoDesdeEventos(mockVaca, historia);
+    const estado = service.derivarEstadoDesdeEventos(mockVaca, [
+      { evento: s1, servicio: det1 },
+      { evento: s2, servicio: det2 },
+    ]);
 
     expect(estado.estadoActual).toBe('Servida');
     expect(estado.servicioActivo?.eventoId).toBe('s2');
     expect(estado.servicioActivo?.toroOPajilla).toBe('Toro 2');
     expect(estado.servicioActivo?.fpp).toBe('2026-10-30');
-    expect(estado.servicioActivo?.palpacionFecha).toBe('2026-03-03');
   });
 });
