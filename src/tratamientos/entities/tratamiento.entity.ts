@@ -37,6 +37,9 @@ export class Tratamiento {
   @Column({ name: 'dias_retiro', type: 'int', default: 0 })
   diasRetiro: number;
 
+  @Column({ name: 'documento_url', type: 'text', nullable: true })
+  documentoUrl: string | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 
