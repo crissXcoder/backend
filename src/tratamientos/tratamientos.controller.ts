@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Request } from '@nestjs/common';
+import { Controller, Get, Post, Put, Body, Param, Request } from '@nestjs/common';
 import { TratamientosService } from './tratamientos.service.js';
 
 @Controller('tratamientos')
@@ -15,5 +15,11 @@ export class TratamientosController {
   findAllByAnimal(@Param('animalId') animalId: string, @Request() req: any) {
     const tenantId = req.user.tenantId;
     return this.tratamientosService.findAllByAnimal(tenantId, animalId);
+  }
+
+  @Put(':id')
+  update(@Param('id') id: string, @Body() updateDto: any, @Request() req: any) {
+    const tenantId = req.user.tenantId;
+    return this.tratamientosService.update(id, tenantId, updateDto);
   }
 }
