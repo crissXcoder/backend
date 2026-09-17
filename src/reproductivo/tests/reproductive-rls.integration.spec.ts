@@ -8,6 +8,7 @@ import { EventoServicio } from '../entities/evento-servicio.entity.js';
 import { EventoDiagnostico } from '../entities/evento-diagnostico.entity.js';
 import { EventoParto } from '../entities/evento-parto.entity.js';
 import { EventoSecado } from '../entities/evento-secado.entity.js';
+import { Potrero } from '../../potreros/entities/potrero.entity.js';
 
 describe('Test de Integración Real RLS — MOD-03 Reproductivo (Base Real Supabase)', () => {
   let dataSource: DataSource;
@@ -33,6 +34,7 @@ describe('Test de Integración Real RLS — MOD-03 Reproductivo (Base Real Supab
         EventoDiagnostico,
         EventoParto,
         EventoSecado,
+        Potrero,
       ],
     });
     await dataSource.initialize();

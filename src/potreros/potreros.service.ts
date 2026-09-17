@@ -1,20 +1,16 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { EntityManager } from 'typeorm';
 import { Potrero } from './entities/potrero.entity.js';
 import { Animal } from '../animales/entities/animal.entity.js';
+import { CreatePotreroDto } from './dto/create-potrero.dto.js';
+import { UpdatePotreroDto } from './dto/update-potrero.dto.js';
 
 @Injectable()
 export class PotrerosService {
-  constructor(
-    @InjectRepository(Potrero)
-    private readonly potreroRepository: Repository<Potrero>,
-    @InjectRepository(Animal)
-    private readonly animalRepository: Repository<Animal>
-  ) {}
+  constructor() {}
 
-  async findAll(tenantId: string) {
-    const potreros = await this.potreroRepository.find({
+  async findAll(tenantId: string, manager: EntityManager) {
+    const potreros = await manager.getRepository(Potrero).find({
       where: { tenantId },
       relations: { animales: true },
       order: { nombre: 'ASC' }
@@ -23,8 +19,8 @@ export class PotrerosService {
     return potreros.map(potrero => this.calcularEstadoPotrero(potrero));
   }
 
-  async findOne(id: string, tenantId: string) {
-    const potrero = await this.potreroRepository.findOne({
+  async findOne(id: string, tenantId: string, manager: EntityManager) {
+    const potrero = await manager.getRepository(Potrero).findOne({
       where: { id, tenantId },
       relations: { animales: true }
     });
@@ -36,45 +32,56 @@ export class PotrerosService {
     return this.calcularEstadoPotrero(potrero);
   }
 
-  async create(tenantId: string, data: any) {
-    const potrero = this.potreroRepository.create({
+  async create(tenantId: string, data: CreatePotreroDto, manager: EntityManager) {
+    const repo = manager.getRepository(Potrero);
+    const potrero = repo.create({
       ...data,
       tenantId,
     });
-    return this.potreroRepository.save(potrero);
+    return repo.save(potrero);
   }
 
-  async update(id: string, tenantId: string, data: any) {
-    const potrero = await this.potreroRepository.findOne({ where: { id, tenantId }});
+  async update(id: string, tenantId: string, data: UpdatePotreroDto, manager: EntityManager) {
+    const repo = manager.getRepository(Potrero);
+    const potrero = await repo.findOne({ where: { id, tenantId }});
     if (!potrero) throw new NotFoundException('Potrero no encontrado');
     
-    this.potreroRepository.merge(potrero, data);
-    return this.potreroRepository.save(potrero);
+    repo.merge(potrero, data);
+    return repo.save(potrero);
   }
 
-  async remove(id: string, tenantId: string) {
-    const potrero = await this.potreroRepository.findOne({ where: { id, tenantId }});
+  async remove(id: string, tenantId: string, manager: EntityManager) {
+    const repo = manager.getRepository(Potrero);
+    const potrero = await repo.findOne({ where: { id, tenantId }});
     if (!potrero) throw new NotFoundException('Potrero no encontrado');
-    return this.potreroRepository.remove(potrero);
+    return repo.remove(potrero);
   }
 
-  async asignarAnimales(id: string, tenantId: string, animalIds: string[]) {
-    const potrero = await this.potreroRepository.findOne({ where: { id, tenantId }});
+  async asignarAnimales(id: string, tenantId: string, animalIds: string[], manager: EntityManager) {
+    const repoPotrero = manager.getRepository(Potrero);
+    const repoAnimal = manager.getRepository(Animal);
+
+    const potrero = await repoPotrero.findOne({ where: { id, tenantId }});
     if (!potrero) throw new NotFoundException('Potrero no encontrado');
     
     if (animalIds && animalIds.length > 0) {
-      await this.animalRepository.createQueryBuilder()
+      // Usamos QueryBuilder desde el manager para respetar la transacción RLS
+      const result = await repoAnimal.createQueryBuilder()
         .update(Animal)
         .set({ potreroId: id })
         .where("id IN (:...ids) AND tenant_id = :tenantId", { ids: animalIds, tenantId })
         .execute();
+        
+      if (result.affected !== animalIds.length) {
+        throw new BadRequestException('Uno o más animales proporcionados no existen o no pertenecen al tenant actual.');
+      }
     }
       
     // Update fechaUltimoIngreso if it's a new group of animals coming in
     potrero.fechaUltimoIngreso = new Date().toISOString().split('T')[0];
-    await this.potreroRepository.save(potrero);
+    await repoPotrero.save(potrero);
 
-    return this.findOne(id, tenantId);
+    return this.findOne(id, tenantId, manager);
   }
 
   private calcularEstadoPotrero(potrero: Potrero) {
