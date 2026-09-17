@@ -1,6 +1,12 @@
 import 'reflect-metadata';
 import { DataSource, type DataSourceOptions } from 'typeorm';
 
+if (!process.env.DATABASE_URL) {
+  try {
+    process.loadEnvFile?.('.env');
+  } catch {}
+}
+
 export const dataSourceOptions: DataSourceOptions = {
   type: 'postgres',
   url: process.env.DATABASE_URL,

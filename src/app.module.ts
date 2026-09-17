@@ -10,6 +10,7 @@ import { PesajesModule } from './pesajes/pesajes.module.js';
 import { ServiciosModule } from './servicios/servicios.module.js';
 import { TratamientosModule } from './tratamientos/tratamientos.module.js';
 import { SanitaryModule } from './sanitary/sanitary.module.js';
+import { ReproductivoModule } from './reproductivo/reproductivo.module.js';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { SanitaryModule } from './sanitary/sanitary.module.js';
     ServiciosModule,
     TratamientosModule,
     SanitaryModule,
+    ReproductivoModule,
   ],
   controllers: [AppController],
   providers: [AppService],

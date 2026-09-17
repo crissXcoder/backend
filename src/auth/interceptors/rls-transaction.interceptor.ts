@@ -123,6 +123,14 @@ export class RlsTransactionInterceptor implements NestInterceptor {
       claimsJson,
     ]);
 
+    // Compatibilidad con tablas creadas con la convención app.current_tenant_id (ej. animal)
+    if (user.tenantId) {
+      await queryRunner.query('SELECT set_config($1, $2, true);', [
+        'app.current_tenant_id',
+        user.tenantId,
+      ]);
+    }
+
     // Establecer el rol local a 'authenticated' para que PostgreSQL aplique las políticas RLS
     await queryRunner.query('SET LOCAL ROLE authenticated;');
   }
