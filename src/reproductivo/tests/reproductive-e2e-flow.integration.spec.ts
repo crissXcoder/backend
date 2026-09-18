@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { DataSource } from 'typeorm';
+import { DataSource, IsNull } from 'typeorm';
 import { dataSourceOptions } from '../../database/data-source.js';
 import { ReproductiveService } from '../services/reproductive.service.js';
 import { ReproductiveCalculationService } from '../services/reproductive-calculation.service.js';
@@ -51,8 +51,14 @@ describe('Test End-to-End Flujo Reproductivo Completo (Base Real Supabase)', () 
       ON CONFLICT (id) DO NOTHING;
     `);
 
-    // 2. Obtener una raza real con días de gestación
-    const raza = await dataSource.getRepository(CatalogoRaza).findOne({ where: {} });
+    // 2. Obtener una raza GLOBAL (tenant_id IS NULL) con días de gestación.
+    // No usar una raza propia de otra finca: desde la migración
+    // SecureCatalogoRazaAndMigrations, catalogo_raza tiene RLS híbrido
+    // (global + por tenant) y una raza tenant-scoped de otra finca no sería
+    // visible bajo la sesión RLS de este tenant de prueba.
+    const raza = await dataSource
+      .getRepository(CatalogoRaza)
+      .findOne({ where: { tenantId: IsNull() } });
     if (!raza || !raza.diasGestacion) {
       throw new Error('Se requiere una raza con diasGestacion para el test E2E.');
     }
