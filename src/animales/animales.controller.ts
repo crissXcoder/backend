@@ -7,13 +7,14 @@ import { CreateAnimalDto } from './dto/create-animal.dto.js';
 import { UpdateAnimalDto } from './dto/update-animal.dto.js';
 import { BajaAnimalDto } from './dto/baja-animal.dto.js';
 import { CreateDocumentoDto } from './dto/create-documento.dto.js';
+import { QueryAnimalDto } from './dto/query-animal.dto.js';
 
 @Controller('animales')
 export class AnimalesController {
   constructor(private readonly animalesService: AnimalesService) {}
 
   @Get()
-  findAll(@Request() req: any, @Query() query: any, @CurrentEntityManager() manager: EntityManager) {
+  findAll(@Request() req: any, @Query() query: QueryAnimalDto, @CurrentEntityManager() manager: EntityManager) {
     const tenantId = req.user.tenantId;
     return this.animalesService.findAll(tenantId, query, manager);
   }

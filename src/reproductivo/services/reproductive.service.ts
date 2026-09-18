@@ -95,38 +95,42 @@ export class ReproductiveService {
       await manager.save(Evento, eventoPrevio);
     }
 
-    // Insertar evento base inmutable
-    const evento = manager.create(Evento, {
-      tenantId,
-      animalId,
-      tipo: 'SERVICIO',
-      fechaEvento: dto.fechaEvento,
-      usuarioId,
-      revertido: false,
-      eventoCorrigeId: dto.eventoCorrigeId ?? null,
-      notas: dto.notas ?? null,
-    });
-    const savedEvento = await manager.save(Evento, evento);
+    try {
+      // Insertar evento base inmutable
+      const evento = manager.create(Evento, {
+        tenantId,
+        animalId,
+        tipo: 'SERVICIO',
+        fechaEvento: dto.fechaEvento,
+        usuarioId,
+        revertido: false,
+        eventoCorrigeId: dto.eventoCorrigeId ?? null,
+        notas: dto.notas ?? null,
+      });
+      const savedEvento = await manager.save(Evento, evento);
 
-    // Insertar tabla de detalle
-    const eventoServicio = manager.create(EventoServicio, {
-      eventoId: savedEvento.id,
-      tipoServicio: dto.tipoServicio,
-      toroOPajilla: dto.toroOPajilla,
-      responsable: dto.responsable ?? null,
-      palpacionFecha: hitos.palpacionFecha,
-      secadoFecha: hitos.secadoFecha,
-      avisoPartoFecha: hitos.avisoPartoFecha,
-      avisoPartoUrgenteFecha: hitos.avisoPartoUrgenteFecha,
-      fpp: hitos.fpp,
-    });
-    const savedServicio = await manager.save(EventoServicio, eventoServicio);
+      // Insertar tabla de detalle
+      const eventoServicio = manager.create(EventoServicio, {
+        eventoId: savedEvento.id,
+        tipoServicio: dto.tipoServicio,
+        toroOPajilla: dto.toroOPajilla,
+        responsable: dto.responsable ?? null,
+        palpacionFecha: hitos.palpacionFecha,
+        secadoFecha: hitos.secadoFecha,
+        avisoPartoFecha: hitos.avisoPartoFecha,
+        avisoPartoUrgenteFecha: hitos.avisoPartoUrgenteFecha,
+        fpp: hitos.fpp,
+      });
+      const savedServicio = await manager.save(EventoServicio, eventoServicio);
 
-    return {
-      evento: savedEvento,
-      servicio: savedServicio,
-      hitos,
-    };
+      return {
+        evento: savedEvento,
+        servicio: savedServicio,
+        hitos,
+      };
+    } catch (error: any) {
+      throw new BadRequestException(`Database error: ${error.message}`);
+    }
   }
 
   /**
@@ -183,29 +187,33 @@ export class ReproductiveService {
       await manager.save(Evento, previo);
     }
 
-    // Insertar evento base
-    const evento = manager.create(Evento, {
-      tenantId,
-      animalId,
-      tipo: 'DIAGNOSTICO',
-      fechaEvento: dto.fechaEvento,
-      usuarioId,
-      revertido: false,
-      eventoCorrigeId: dto.eventoCorrigeId ?? null,
-      notas: dto.notas ?? null,
-    });
-    const savedEvento = await manager.save(Evento, evento);
+    try {
+      // Insertar evento base
+      const evento = manager.create(Evento, {
+        tenantId,
+        animalId,
+        tipo: 'DIAGNOSTICO',
+        fechaEvento: dto.fechaEvento,
+        usuarioId,
+        revertido: false,
+        eventoCorrigeId: dto.eventoCorrigeId ?? null,
+        notas: dto.notas ?? null,
+      });
+      const savedEvento = await manager.save(Evento, evento);
 
-    // Insertar detalle de diagnóstico
-    const diagnostico = manager.create(EventoDiagnostico, {
-      eventoId: savedEvento.id,
-      eventoServicioId: dto.eventoServicioId,
-      metodo: dto.metodo,
-      resultado: dto.resultado,
-    });
-    const savedDiagnostico = await manager.save(EventoDiagnostico, diagnostico);
+      // Insertar detalle de diagnóstico
+      const diagnostico = manager.create(EventoDiagnostico, {
+        eventoId: savedEvento.id,
+        eventoServicioId: dto.eventoServicioId,
+        metodo: dto.metodo,
+        resultado: dto.resultado,
+      });
+      const savedDiagnostico = await manager.save(EventoDiagnostico, diagnostico);
 
-    return { evento: savedEvento, diagnostico: savedDiagnostico };
+      return { evento: savedEvento, diagnostico: savedDiagnostico };
+    } catch (error: any) {
+      throw new BadRequestException(`Database error: ${error.message}`);
+    }
   }
 
   /**
