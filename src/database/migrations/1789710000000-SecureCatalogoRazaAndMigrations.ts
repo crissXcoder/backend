@@ -16,9 +16,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *    nombres distintos, y porque la migración SeedRazas que sigue a esta
  *    depende de un `ON CONFLICT (nombre)`.
  */
-export class SecureCatalogoRazaAndMigrations1789710000000
-  implements MigrationInterface
-{
+export class SecureCatalogoRazaAndMigrations1789710000000 implements MigrationInterface {
   name = 'SecureCatalogoRazaAndMigrations1789710000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -29,10 +27,22 @@ export class SecureCatalogoRazaAndMigrations1789710000000
     `);
 
     // 2. catalogo_raza: UNIQUE(nombre) + RLS híbrido
+    // La guarda sobre pg_constraint es una corrección de idempotencia: sin ella
+    // un segundo intento (o un replay en base limpia tras un fallo parcial)
+    // aborta con "constraint already exists".
     await queryRunner.query(`
-      ALTER TABLE public.catalogo_raza
-        ADD CONSTRAINT catalogo_raza_nombre_key UNIQUE (nombre);
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'catalogo_raza_nombre_key'
+        ) THEN
+          ALTER TABLE public.catalogo_raza
+            ADD CONSTRAINT catalogo_raza_nombre_key UNIQUE (nombre);
+        END IF;
+      END $$;
+    `);
 
+    await queryRunner.query(`
       ALTER TABLE public.catalogo_raza ENABLE ROW LEVEL SECURITY;
       ALTER TABLE public.catalogo_raza FORCE ROW LEVEL SECURITY;
 

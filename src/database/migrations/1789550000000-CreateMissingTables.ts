@@ -5,7 +5,9 @@ export class CreateMissingTables1789550000000 implements MigrationInterface {
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Columna potrero en animal
-    await queryRunner.query(`ALTER TABLE "animal" ADD COLUMN IF NOT EXISTS "potrero" text`);
+    await queryRunner.query(
+      `ALTER TABLE "animal" ADD COLUMN IF NOT EXISTS "potrero" text`,
+    );
 
     // Tabla pesaje
     await queryRunner.query(`
@@ -52,7 +54,9 @@ export class CreateMissingTables1789550000000 implements MigrationInterface {
     `);
 
     // Habilitar RLS en documento_animal
-    await queryRunner.query(`ALTER TABLE "documento_animal" ENABLE ROW LEVEL SECURITY`);
+    await queryRunner.query(
+      `ALTER TABLE "documento_animal" ENABLE ROW LEVEL SECURITY`,
+    );
     await queryRunner.query(`
       CREATE POLICY "tenant_isolation_documento_animal" ON "documento_animal"
       AS PERMISSIVE FOR ALL
@@ -60,7 +64,9 @@ export class CreateMissingTables1789550000000 implements MigrationInterface {
       USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid)
       WITH CHECK (tenant_id = current_setting('app.current_tenant_id', true)::uuid)
     `);
-    await queryRunner.query(`ALTER TABLE "documento_animal" FORCE ROW LEVEL SECURITY`);
+    await queryRunner.query(
+      `ALTER TABLE "documento_animal" FORCE ROW LEVEL SECURITY`,
+    );
 
     // Tabla tratamiento_sanitario
     await queryRunner.query(`
@@ -85,7 +91,9 @@ export class CreateMissingTables1789550000000 implements MigrationInterface {
     `);
 
     // Habilitar RLS en tratamiento_sanitario
-    await queryRunner.query(`ALTER TABLE "tratamiento_sanitario" ENABLE ROW LEVEL SECURITY`);
+    await queryRunner.query(
+      `ALTER TABLE "tratamiento_sanitario" ENABLE ROW LEVEL SECURITY`,
+    );
     await queryRunner.query(`
       CREATE POLICY "tenant_isolation_tratamiento_sanitario" ON "tratamiento_sanitario"
       AS PERMISSIVE FOR ALL
@@ -93,13 +101,17 @@ export class CreateMissingTables1789550000000 implements MigrationInterface {
       USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid)
       WITH CHECK (tenant_id = current_setting('app.current_tenant_id', true)::uuid)
     `);
-    await queryRunner.query(`ALTER TABLE "tratamiento_sanitario" FORCE ROW LEVEL SECURITY`);
+    await queryRunner.query(
+      `ALTER TABLE "tratamiento_sanitario" FORCE ROW LEVEL SECURITY`,
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP TABLE "tratamiento_sanitario"`);
-    await queryRunner.query(`DROP TABLE "documento_animal"`);
-    await queryRunner.query(`DROP TABLE "pesaje"`);
-    await queryRunner.query(`ALTER TABLE "animal" DROP COLUMN "potrero"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "tratamiento_sanitario"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "documento_animal"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "pesaje"`);
+    await queryRunner.query(
+      `ALTER TABLE "animal" DROP COLUMN IF EXISTS "potrero"`,
+    );
   }
 }

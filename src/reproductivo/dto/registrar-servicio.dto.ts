@@ -1,24 +1,22 @@
 import {
-  IsDateString,
   IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
+  MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import type { TipoServicio } from '../entities/evento-servicio.entity.js';
+import { EsFechaDeEvento } from './validators/fecha-evento.validator.js';
 
 export class RegistrarServicioDto {
   @ApiProperty({
-    description: 'Fecha en que se realizó el servicio (YYYY-MM-DD)',
+    description:
+      'Fecha en que se realizó el servicio (YYYY-MM-DD). No puede ser futura. Es la base del cálculo de la FPP.',
     example: '2026-09-16',
   })
-  @IsDateString(
-    {},
-    { message: 'La fecha del servicio debe tener formato de fecha válido (YYYY-MM-DD)' },
-  )
-  @IsNotEmpty({ message: 'La fecha del servicio es requerida' })
+  @EsFechaDeEvento('del servicio')
   fechaEvento: string;
 
   @ApiProperty({
@@ -38,6 +36,9 @@ export class RegistrarServicioDto {
     example: 'Titan (CRC-B-001)',
   })
   @IsString({ message: 'El toro o código de pajilla debe ser texto' })
+  @MaxLength(200, {
+    message: 'El toro o código de pajilla no puede superar los 200 caracteres',
+  })
   @IsNotEmpty({ message: 'El toro o código de pajilla es requerido' })
   toroOPajilla: string;
 
@@ -46,14 +47,21 @@ export class RegistrarServicioDto {
     example: 'Dr. Roberto García',
   })
   @IsString({ message: 'El responsable debe ser texto' })
+  @MaxLength(200, {
+    message: 'El responsable no puede superar los 200 caracteres',
+  })
   @IsOptional()
   responsable?: string;
 
   @ApiPropertyOptional({
     description: 'Observaciones adicionales sobre el servicio',
-    example: 'Celo detectado a las 6:00 AM, servicio aplicado 4:00 PM (regla AM/PM)',
+    example:
+      'Celo detectado a las 6:00 AM, servicio aplicado 4:00 PM (regla AM/PM)',
   })
   @IsString({ message: 'Las notas deben ser texto' })
+  @MaxLength(2000, {
+    message: 'Las notas no pueden superar los 2000 caracteres',
+  })
   @IsOptional()
   notas?: string;
 

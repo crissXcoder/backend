@@ -63,16 +63,24 @@ describe('ReproductiveService (Orquestador de Dominio Reproductivo)', () => {
     // Creamos mock ligero para stateService
     stateService = {
       calcularEstado: vi.fn(),
+      calcularEstadosBatch: vi.fn(async () => new Map()),
       derivarEstadoDesdeEventos: vi.fn(),
+      obtenerHistorial: vi.fn(),
     } as unknown as ReproductiveStateService;
 
-    // Mock dinámico de EntityManager
+    // Mock dinámico de EntityManager.
+    // `transaction` ejecuta el callback con el mismo manager: contra Postgres
+    // real esto es un SAVEPOINT anidado dentro de la transacción que ya abrió
+    // RlsTransactionInterceptor, así que el manager efectivo es equivalente.
     mockEntityManager = {
       findOne: vi.fn(),
       find: vi.fn(),
       create: vi.fn((entityClass, plain) => ({ ...plain })),
       save: vi.fn((entityClass, entity) =>
         Promise.resolve({ id: 'saved-uuid-1', ...entity }),
+      ),
+      transaction: vi.fn((cb: (m: EntityManager) => Promise<unknown>) =>
+        cb(mockEntityManager),
       ),
     } as unknown as EntityManager;
 
@@ -81,7 +89,9 @@ describe('ReproductiveService (Orquestador de Dominio Reproductivo)', () => {
 
   describe('registrarServicio', () => {
     it('debe registrar exitosamente un servicio calculando los 5 hitos en una sola transacción', async () => {
-      vi.spyOn(mockEntityManager, 'findOne').mockResolvedValue(mockVacaA as Animal);
+      vi.spyOn(mockEntityManager, 'findOne').mockResolvedValue(
+        mockVacaA as Animal,
+      );
 
       const dto = {
         fechaEvento: '2026-03-01',
@@ -118,7 +128,9 @@ describe('ReproductiveService (Orquestador de Dominio Reproductivo)', () => {
     });
 
     it('debe rechazar con BadRequestException (400) si el animal es macho', async () => {
-      vi.spyOn(mockEntityManager, 'findOne').mockResolvedValue(mockToroA as Animal);
+      vi.spyOn(mockEntityManager, 'findOne').mockResolvedValue(
+        mockToroA as Animal,
+      );
 
       const dto = {
         fechaEvento: '2026-03-01',
@@ -127,7 +139,13 @@ describe('ReproductiveService (Orquestador de Dominio Reproductivo)', () => {
       };
 
       await expect(
-        service.registrarServicio(mockToroA.id!, tenantA, userId, dto, mockEntityManager),
+        service.registrarServicio(
+          mockToroA.id!,
+          tenantA,
+          userId,
+          dto,
+          mockEntityManager,
+        ),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -265,12 +283,26 @@ describe('ReproductiveService (Orquestador de Dominio Reproductivo)', () => {
   });
 
   describe('registrarParto y registrarSecado', () => {
+    /** Deja al animal en un estado desde el que un parto es válido. */
+    const estadoPrenada = (estadoActual: 'Preñada' | 'En Secado' = 'Preñada') =>
+      vi.spyOn(stateService, 'calcularEstado').mockResolvedValue({
+        animalId: mockVacaA.id!,
+        areteInterno: '101',
+        sexo: 'Hembra',
+        estadoActual,
+        proximosHitos: [],
+        advertencias: [],
+      });
+
     it('debe registrar parto exitosamente', async () => {
-      vi.spyOn(mockEntityManager, 'findOne').mockResolvedValue(mockVacaA as Animal);
+      vi.spyOn(mockEntityManager, 'findOne').mockResolvedValue(
+        mockVacaA as Animal,
+      );
+      estadoPrenada();
 
       const dto = {
-        fechaEvento: '2026-12-07',
-        facilidadParto: 'Normal (Eutócico)',
+        fechaEvento: '2026-09-07',
+        facilidadParto: 'Normal' as const,
         observaciones: 'Cría hembra nacida sana',
       };
 
@@ -283,11 +315,118 @@ describe('ReproductiveService (Orquestador de Dominio Reproductivo)', () => {
       );
 
       expect(result.evento.tipo).toBe('PARTO');
-      expect(result.parto.facilidadParto).toBe('Normal (Eutócico)');
+      expect(result.parto.facilidadParto).toBe('Normal');
+    });
+
+    it('acepta el parto también desde "En Secado"', async () => {
+      vi.spyOn(mockEntityManager, 'findOne').mockResolvedValue(
+        mockVacaA as Animal,
+      );
+      estadoPrenada('En Secado');
+
+      const result = await service.registrarParto(
+        mockVacaA.id!,
+        tenantA,
+        userId,
+        { fechaEvento: '2026-09-07' },
+        mockEntityManager,
+      );
+
+      expect(result.evento.tipo).toBe('PARTO');
+    });
+
+    it('CASO LÍMITE: rechaza con 400 un parto sobre un animal que no está preñado', async () => {
+      vi.spyOn(mockEntityManager, 'findOne').mockResolvedValue(
+        mockVacaA as Animal,
+      );
+      vi.spyOn(stateService, 'calcularEstado').mockResolvedValue({
+        animalId: mockVacaA.id!,
+        areteInterno: '101',
+        sexo: 'Hembra',
+        estadoActual: 'Vacía',
+        proximosHitos: [],
+        advertencias: [],
+      });
+
+      await expect(
+        service.registrarParto(
+          mockVacaA.id!,
+          tenantA,
+          userId,
+          { fechaEvento: '2026-09-07' },
+          mockEntityManager,
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('SEGURIDAD: rechaza con 404 un eventoServicioId que no pertenece al animal o a la finca', async () => {
+      // El animal existe, pero la búsqueda del evento de servicio no devuelve nada.
+      // Sin esta validación el id se persistía tal cual: las FK de Postgres no
+      // aplican RLS, así que un id de otra finca quedaba enlazado.
+      vi.spyOn(mockEntityManager, 'findOne').mockImplementation(
+        async (entityClass: any) =>
+          entityClass === Animal ? (mockVacaA as Animal) : null,
+      );
+
+      await expect(
+        service.registrarParto(
+          mockVacaA.id!,
+          tenantA,
+          userId,
+          {
+            fechaEvento: '2026-09-07',
+            eventoServicioId: '11111111-1111-4111-8111-111111111111',
+          },
+          mockEntityManager,
+        ),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('CASO LÍMITE: rechaza con 404 un eventoCorrigeId inexistente en un parto (antes devolvía 201 sin corregir nada)', async () => {
+      vi.spyOn(mockEntityManager, 'findOne').mockImplementation(
+        async (entityClass: any) =>
+          entityClass === Animal ? (mockVacaA as Animal) : null,
+      );
+      estadoPrenada();
+
+      await expect(
+        service.registrarParto(
+          mockVacaA.id!,
+          tenantA,
+          userId,
+          {
+            fechaEvento: '2026-09-07',
+            eventoCorrigeId: '22222222-2222-4222-8222-222222222222',
+          },
+          mockEntityManager,
+        ),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('CASO LÍMITE: rechaza con 404 un eventoCorrigeId inexistente en un secado', async () => {
+      vi.spyOn(mockEntityManager, 'findOne').mockImplementation(
+        async (entityClass: any) =>
+          entityClass === Animal ? (mockVacaA as Animal) : null,
+      );
+
+      await expect(
+        service.registrarSecado(
+          mockVacaA.id!,
+          tenantA,
+          userId,
+          {
+            fechaEvento: '2026-09-07',
+            eventoCorrigeId: '33333333-3333-4333-8333-333333333333',
+          },
+          mockEntityManager,
+        ),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('debe registrar secado real exitosamente', async () => {
-      vi.spyOn(mockEntityManager, 'findOne').mockResolvedValue(mockVacaA as Animal);
+      vi.spyOn(mockEntityManager, 'findOne').mockResolvedValue(
+        mockVacaA as Animal,
+      );
 
       const dto = {
         fechaEvento: '2026-10-08',
@@ -320,45 +459,135 @@ describe('ReproductiveService (Orquestador de Dominio Reproductivo)', () => {
       };
 
       // manager.find busca animales con where: { tenantId: tenantA, activo: true }
-      vi.spyOn(mockEntityManager, 'find').mockImplementation(async (entityClass, options: any) => {
-        if (options?.where?.tenantId === tenantA) {
-          return [vacaTenantA1 as Animal];
-        }
-        return []; // Tenant B o desconocido
-      });
+      vi.spyOn(mockEntityManager, 'find').mockImplementation(
+        async (entityClass, options: any) => {
+          if (options?.where?.tenantId === tenantA) {
+            return [vacaTenantA1 as Animal];
+          }
+          return []; // Tenant B o desconocido
+        },
+      );
 
-      // Mockear cálculo de estado para vaca-a1 con un próximo parto
-      vi.spyOn(stateService, 'calcularEstado').mockResolvedValue({
-        animalId: 'vaca-a1',
+      // El feed ahora deriva los estados en lote: una sola pasada para todas las
+      // hembras, en vez de una cascada de consultas por animal.
+      vi.spyOn(stateService, 'calcularEstadosBatch').mockImplementation(
+        async (animales) =>
+          new Map(
+            animales.map((a) => [
+              a.id,
+              {
+                animalId: a.id,
+                areteInterno: '101',
+                sexo: 'Hembra',
+                razaNombre: 'Holstein',
+                estadoActual: 'Preñada' as const,
+                diasEnEstado: 200,
+                diasGestacionRaza: 281,
+                proximosHitos: [
+                  {
+                    tipo: 'Parto FPP' as const,
+                    fecha: '2026-10-15',
+                    diasRestantes: 20,
+                    urgente: false,
+                  },
+                  {
+                    tipo: 'Aviso Parto Urgente' as const,
+                    fecha: '2026-10-12',
+                    diasRestantes: 17,
+                    urgente: true,
+                  },
+                ],
+                advertencias: [],
+              },
+            ]),
+          ),
+      );
+
+      // Consultar para Tenant A
+      const eventosTenantA = await service.obtenerProximosEventos(
+        tenantA,
+        mockEntityManager,
+      );
+      expect(eventosTenantA).toHaveLength(2);
+      expect(eventosTenantA.every((e) => e.animalId === 'vaca-a1')).toBe(true);
+      // 'Parto FPP' se publica como 'Parto' en el contrato del feed.
+      expect(eventosTenantA.map((e) => e.tipo)).toContain('Parto');
+      // El aviso urgente ya viaja en el feed, con su bandera.
+      const urgente = eventosTenantA.find(
+        (e) => e.tipo === 'Aviso Parto Urgente',
+      );
+      expect(urgente?.urgente).toBe(true);
+
+      // Consultar para Tenant B
+      const eventosTenantB = await service.obtenerProximosEventos(
+        tenantB,
+        mockEntityManager,
+      );
+      expect(eventosTenantB).toHaveLength(0); // Cero animales de tenant A fugados hacia tenant B
+    });
+
+    it('CASO LÍMITE: la ventana incluye los hitos vencidos hace 7 días y excluye los de 8', async () => {
+      const vaca: Partial<Animal> = {
+        id: 'vaca-a1',
+        tenantId: tenantA,
         areteInterno: '101',
         nombre: 'Paloma',
         sexo: 'Hembra',
-        raza: 'Holstein',
-        estadoActual: 'Preñada',
-        diasEnEstado: 200,
-        diasGestacionRaza: 281,
-        proximosHitos: [
-          {
-            tipo: 'Parto FPP',
-            fecha: '2026-10-15',
-            diasRestantes: 20,
-            urgente: false,
-          },
-        ],
-        resumenUltimosEventos: [],
-        advertencias: [],
-      });
+        activo: true,
+      };
+      vi.spyOn(mockEntityManager, 'find').mockResolvedValue([vaca as Animal]);
+      vi.spyOn(stateService, 'calcularEstadosBatch').mockResolvedValue(
+        new Map([
+          [
+            'vaca-a1',
+            {
+              animalId: 'vaca-a1',
+              areteInterno: '101',
+              sexo: 'Hembra',
+              estadoActual: 'Servida' as const,
+              proximosHitos: [
+                {
+                  tipo: 'Palpación' as const,
+                  fecha: '2026-09-11',
+                  diasRestantes: -7,
+                  urgente: false,
+                },
+                {
+                  tipo: 'Secado' as const,
+                  fecha: '2026-09-10',
+                  diasRestantes: -8,
+                  urgente: false,
+                },
+                {
+                  tipo: 'Parto FPP' as const,
+                  fecha: '2026-10-18',
+                  diasRestantes: 30,
+                  urgente: false,
+                },
+                {
+                  tipo: 'Aviso Parto' as const,
+                  fecha: '2026-10-19',
+                  diasRestantes: 31,
+                  urgente: false,
+                },
+              ],
+              advertencias: [],
+            },
+          ],
+        ]),
+      );
 
-      // Consultar para Tenant A
-      const eventosTenantA = await service.obtenerProximosEventos(tenantA, mockEntityManager);
-      expect(eventosTenantA).toHaveLength(1);
-      expect(eventosTenantA[0].animalId).toBe('vaca-a1');
-      expect(eventosTenantA[0].tipo).toBe('Parto');
-      expect(eventosTenantA[0].diasRestantes).toBe(20);
+      const eventos = await service.obtenerProximosEventos(
+        tenantA,
+        mockEntityManager,
+        30,
+      );
 
-      // Consultar para Tenant B
-      const eventosTenantB = await service.obtenerProximosEventos(tenantB, mockEntityManager);
-      expect(eventosTenantB).toHaveLength(0); // Cero animales de tenant A fugados hacia tenant B
+      const dias = eventos.map((e) => e.diasRestantes);
+      expect(dias).toContain(-7); // el borde inferior entra
+      expect(dias).not.toContain(-8); // uno más allá, no
+      expect(dias).toContain(30); // el borde superior entra
+      expect(dias).not.toContain(31); // uno más allá, no
     });
   });
 });

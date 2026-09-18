@@ -1,6 +1,24 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import type { HitosReproductivos } from '../interfaces/reproductive-state.interface.js';
 
+/** Zona horaria de la finca. Costa Rica es UTC−6 y no aplica horario de verano. */
+export const ZONA_HORARIA_FINCA = 'America/Costa_Rica';
+
+/**
+ * Fecha de hoy en la zona horaria de la finca, como YYYY-MM-DD.
+ *
+ * Se expone como función suelta, además de método del servicio, porque los
+ * validadores de class-validator no pasan por el contenedor de dependencias.
+ */
+export function hoyEnZona(zonaHoraria: string = ZONA_HORARIA_FINCA): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: zonaHoraria,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
 @Injectable()
 export class ReproductiveCalculationService {
   /**
@@ -75,6 +93,21 @@ export class ReproductiveCalculationService {
       avisoPartoFecha,
       avisoPartoUrgenteFecha,
     };
+  }
+
+  /**
+   * Fecha de hoy en la zona horaria de la finca, como YYYY-MM-DD.
+   *
+   * Antes el sistema usaba `new Date().toISOString().slice(0, 10)`, que da el día
+   * en UTC. Costa Rica es UTC−6, así que entre las 18:00 y la medianoche local el
+   * servidor ya estaba contando el día siguiente: durante seis horas de cada día
+   * los `diasRestantes` de todos los hitos salían corridos en uno.
+   *
+   * `Intl.DateTimeFormat` con locale `en-CA` devuelve directamente el formato
+   * YYYY-MM-DD, sin tener que recomponer las partes a mano.
+   */
+  hoyLocal(zonaHoraria: string = ZONA_HORARIA_FINCA): string {
+    return hoyEnZona(zonaHoraria);
   }
 
   /**

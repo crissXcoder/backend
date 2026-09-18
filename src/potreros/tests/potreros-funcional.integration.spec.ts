@@ -1,16 +1,28 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  vi,
+} from 'vitest';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
-import { AppModule } from '../../app.module';
+// ESM con moduleResolution "nodenext": los imports relativos llevan extensión .js.
+import { AppModule } from '../../app.module.js';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Animal } from '../../animales/entities/animal.entity';
-import { Potrero } from '../entities/potrero.entity';
-import { RlsTransactionInterceptor } from '../../auth/interceptors/rls-transaction.interceptor';
-import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../../auth/guards/roles.guard';
-import { SupabaseJwtService } from '../../auth/services/supabase-jwt.service';
+import { Animal } from '../../animales/entities/animal.entity.js';
+import { Potrero } from '../entities/potrero.entity.js';
+import { RlsTransactionInterceptor } from '../../auth/interceptors/rls-transaction.interceptor.js';
+// El guard se llama AuthGuard, no JwtAuthGuard: `jwt-auth.guard` nunca existió
+// en este repositorio, así que el archivo entero fallaba al cargar y sus 5 tests
+// nunca corrían.
+import { AuthGuard } from '../../auth/guards/auth.guard.js';
+import { RolesGuard } from '../../auth/guards/roles.guard.js';
+import { SupabaseJwtService } from '../../auth/services/supabase-jwt.service.js';
 
 describe('Potreros Funcional & Regresión (Integration)', () => {
   let app: INestApplication;
@@ -23,8 +35,20 @@ describe('Potreros Funcional & Regresión (Integration)', () => {
   const tenantB = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 
   // Tokens simulados (payloads base64 para el mock)
-  const tokenPropietarioA = Buffer.from(JSON.stringify({ sub: 'user-a', app_metadata: { tenant_id: tenantA }, rol: 'propietario' })).toString('base64');
-  const tokenPropietarioB = Buffer.from(JSON.stringify({ sub: 'user-b', app_metadata: { tenant_id: tenantB }, rol: 'propietario' })).toString('base64');
+  const tokenPropietarioA = Buffer.from(
+    JSON.stringify({
+      sub: 'user-a',
+      app_metadata: { tenant_id: tenantA },
+      rol: 'propietario',
+    }),
+  ).toString('base64');
+  const tokenPropietarioB = Buffer.from(
+    JSON.stringify({
+      sub: 'user-b',
+      app_metadata: { tenant_id: tenantB },
+      rol: 'propietario',
+    }),
+  ).toString('base64');
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -35,31 +59,52 @@ describe('Potreros Funcional & Regresión (Integration)', () => {
         verifyToken: async (token: string) => {
           const parts = token.split('.');
           const payloadBase64 = parts.length === 3 ? parts[1] : token;
-          return JSON.parse(Buffer.from(payloadBase64, 'base64').toString('utf8'));
-        }
+          return JSON.parse(
+            Buffer.from(payloadBase64, 'base64').toString('utf8'),
+          );
+        },
       })
       .compile();
 
     app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }));
-    
+    app.useGlobalPipes(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      }),
+    );
+
     // Obtenemos repositorios globales para preparar los datos
-    animalRepo = moduleFixture.get<Repository<Animal>>(getRepositoryToken(Animal));
-    potreroRepo = moduleFixture.get<Repository<Potrero>>(getRepositoryToken(Potrero));
-    supabaseJwtService = moduleFixture.get<SupabaseJwtService>(SupabaseJwtService);
+    animalRepo = moduleFixture.get<Repository<Animal>>(
+      getRepositoryToken(Animal),
+    );
+    potreroRepo = moduleFixture.get<Repository<Potrero>>(
+      getRepositoryToken(Potrero),
+    );
+    supabaseJwtService =
+      moduleFixture.get<SupabaseJwtService>(SupabaseJwtService);
 
     await app.init();
   });
 
   afterAll(async () => {
-    await animalRepo.query(`DELETE FROM animal WHERE tenant_id IN ('${tenantA}', '${tenantB}')`);
-    await potreroRepo.query(`DELETE FROM potrero WHERE tenant_id IN ('${tenantA}', '${tenantB}')`);
+    await animalRepo.query(
+      `DELETE FROM animal WHERE tenant_id IN ('${tenantA}', '${tenantB}')`,
+    );
+    await potreroRepo.query(
+      `DELETE FROM potrero WHERE tenant_id IN ('${tenantA}', '${tenantB}')`,
+    );
     await app.close();
   });
 
   beforeEach(async () => {
-    await animalRepo.query(`DELETE FROM animal WHERE tenant_id IN ('${tenantA}', '${tenantB}')`);
-    await potreroRepo.query(`DELETE FROM potrero WHERE tenant_id IN ('${tenantA}', '${tenantB}')`);
+    await animalRepo.query(
+      `DELETE FROM animal WHERE tenant_id IN ('${tenantA}', '${tenantB}')`,
+    );
+    await potreroRepo.query(
+      `DELETE FROM potrero WHERE tenant_id IN ('${tenantA}', '${tenantB}')`,
+    );
   });
 
   describe('Flujo de Traslado y Asignación Múltiple', () => {
@@ -72,7 +117,7 @@ describe('Potreros Funcional & Regresión (Integration)', () => {
           nombre: 'Potrero 1 (Origen)',
           areaHa: 10,
           capacidadRecomendadaUaHa: 1, // 10 UA total
-          diasDescansoRecomendados: 30
+          diasDescansoRecomendados: 30,
         });
       const p1Id = p1Res.body.id;
 
@@ -83,16 +128,20 @@ describe('Potreros Funcional & Regresión (Integration)', () => {
           nombre: 'Potrero 2 (Destino)',
           areaHa: 5,
           capacidadRecomendadaUaHa: 1, // 5 UA total
-          diasDescansoRecomendados: 30
+          diasDescansoRecomendados: 30,
         });
       const p2Id = p2Res.body.id;
 
       // Insertar una raza temporal si no hay
-      let razaResult = await animalRepo.query(`SELECT id FROM catalogo_raza LIMIT 1`);
+      let razaResult = await animalRepo.query(
+        `SELECT id FROM catalogo_raza LIMIT 1`,
+      );
       let razaId = razaResult[0]?.id;
       if (!razaId) {
         razaId = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
-        await animalRepo.query(`INSERT INTO catalogo_raza (id, nombre, especie, codigo) VALUES ('${razaId}', 'Angus', 'Bovina', 'ANG') ON CONFLICT DO NOTHING`);
+        await animalRepo.query(
+          `INSERT INTO catalogo_raza (id, nombre, especie, codigo) VALUES ('${razaId}', 'Angus', 'Bovina', 'ANG') ON CONFLICT DO NOTHING`,
+        );
       }
 
       // 2. Crear 4 animales directamente en DB para aislar la prueba de DTOs (2 Vacas = 2 UA, 2 Terneros = 1 UA. Total = 3 UA)
@@ -101,7 +150,7 @@ describe('Potreros Funcional & Regresión (Integration)', () => {
         const insertRes = await animalRepo.query(
           `INSERT INTO animal (tenant_id, nombre, arete_interno, sexo, categoria, raza_id, potrero_id, fecha_nacimiento)
            VALUES ('${tenantA}', 'Animal ${i}', 'A${i}', '${i < 2 ? 'Hembra' : 'Macho'}', '${i < 2 ? 'Vaca' : 'Ternero'}', '${razaId}', '${p1Id}', '2020-01-01')
-           RETURNING id`
+           RETURNING id`,
         );
         animals.push(insertRes[0].id);
       }
@@ -110,7 +159,7 @@ describe('Potreros Funcional & Regresión (Integration)', () => {
       const p1Check1 = await request(app.getHttpServer())
         .get(`/potreros/${p1Id}`)
         .set('Authorization', `Bearer ${tokenPropietarioA}`);
-      
+
       expect(p1Check1.body.cargaActualUaHa).toBeCloseTo(0.3, 1); // 3 UA / 10 Ha
       expect(p1Check1.body.animalesAsignadosCount).toBe(4);
       expect(p1Check1.body.estadoCalculado).toBe('DISPONIBLE'); // 0.3 < 1.0
@@ -120,7 +169,7 @@ describe('Potreros Funcional & Regresión (Integration)', () => {
         .post(`/potreros/${p2Id}/asignar`)
         .set('Authorization', `Bearer ${tokenPropietarioA}`)
         .send({ animalIds: animals });
-      
+
       expect(trasladoRes.status).toBe(201);
 
       // 4. Comprobar P1 (debe quedar vacío)
@@ -137,7 +186,7 @@ describe('Potreros Funcional & Regresión (Integration)', () => {
       expect(p2Check1.body.cargaActualUaHa).toBeCloseTo(0.6, 1); // 3 UA / 5 Ha
       expect(p2Check1.body.animalesAsignadosCount).toBe(4);
       expect(p2Check1.body.estadoCalculado).toBe('DISPONIBLE'); // 0.6 < 1.0
-      
+
       // 6. Verificar a nivel de Animal que apuntan al nuevo potrero
       const aCheck = await request(app.getHttpServer())
         .get(`/animales/${animals[0]}`)
@@ -151,15 +200,24 @@ describe('Potreros Funcional & Regresión (Integration)', () => {
       const p1Res = await request(app.getHttpServer())
         .post('/potreros')
         .set('Authorization', `Bearer ${tokenPropietarioA}`)
-        .send({ nombre: 'Pequeño', areaHa: 1, capacidadRecomendadaUaHa: 1, diasDescansoRecomendados: 30 });
+        .send({
+          nombre: 'Pequeño',
+          areaHa: 1,
+          capacidadRecomendadaUaHa: 1,
+          diasDescansoRecomendados: 30,
+        });
       const p1Id = p1Res.body.id;
 
       // Insertar una raza temporal si no hay
-      let razaResult = await animalRepo.query(`SELECT id FROM catalogo_raza LIMIT 1`);
+      let razaResult = await animalRepo.query(
+        `SELECT id FROM catalogo_raza LIMIT 1`,
+      );
       let razaId = razaResult[0]?.id;
       if (!razaId) {
         razaId = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
-        await animalRepo.query(`INSERT INTO catalogo_raza (id, nombre, especie, codigo) VALUES ('${razaId}', 'Angus', 'Bovina', 'ANG') ON CONFLICT DO NOTHING`);
+        await animalRepo.query(
+          `INSERT INTO catalogo_raza (id, nombre, especie, codigo) VALUES ('${razaId}', 'Angus', 'Bovina', 'ANG') ON CONFLICT DO NOTHING`,
+        );
       }
 
       // Crear 2 Toros = 2 UA directamente en DB
@@ -167,13 +225,13 @@ describe('Potreros Funcional & Regresión (Integration)', () => {
         `INSERT INTO animal (tenant_id, nombre, arete_interno, sexo, categoria, raza_id, potrero_id, fecha_nacimiento)
          VALUES 
          ('${tenantA}', 'Toro 1', 'T1', 'Macho', 'Toro', '${razaId}', '${p1Id}', '2020-01-01'),
-         ('${tenantA}', 'Toro 2', 'T2', 'Macho', 'Toro', '${razaId}', '${p1Id}', '2020-01-01')`
+         ('${tenantA}', 'Toro 2', 'T2', 'Macho', 'Toro', '${razaId}', '${p1Id}', '2020-01-01')`,
       );
 
       const p1Check = await request(app.getHttpServer())
         .get(`/potreros/${p1Id}`)
         .set('Authorization', `Bearer ${tokenPropietarioA}`);
-      
+
       expect(p1Check.body.cargaActualUaHa).toBe(2); // 2 UA / 1 Ha = 2
       expect(p1Check.body.estadoCalculado).toBe('SOBRECARGADO');
     });
@@ -196,21 +254,30 @@ describe('Potreros Funcional & Regresión (Integration)', () => {
       const pResA = await request(app.getHttpServer())
         .post('/potreros')
         .set('Authorization', `Bearer ${tokenPropietarioA}`)
-        .send({ nombre: 'Potrero A', areaHa: 10, capacidadRecomendadaUaHa: 1, diasDescansoRecomendados: 30 });
-      
+        .send({
+          nombre: 'Potrero A',
+          areaHa: 10,
+          capacidadRecomendadaUaHa: 1,
+          diasDescansoRecomendados: 30,
+        });
+
       // Insertar una raza temporal si no hay
-      let razaResult = await animalRepo.query(`SELECT id FROM catalogo_raza LIMIT 1`);
+      let razaResult = await animalRepo.query(
+        `SELECT id FROM catalogo_raza LIMIT 1`,
+      );
       let razaId = razaResult[0]?.id;
       if (!razaId) {
         razaId = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
-        await animalRepo.query(`INSERT INTO catalogo_raza (id, nombre, especie, codigo) VALUES ('${razaId}', 'Angus', 'Bovina', 'ANG') ON CONFLICT DO NOTHING`);
+        await animalRepo.query(
+          `INSERT INTO catalogo_raza (id, nombre, especie, codigo) VALUES ('${razaId}', 'Angus', 'Bovina', 'ANG') ON CONFLICT DO NOTHING`,
+        );
       }
 
       // Animal en Tenant B creado directamente
       const insertResB = await animalRepo.query(
         `INSERT INTO animal (tenant_id, nombre, arete_interno, sexo, categoria, raza_id, fecha_nacimiento)
          VALUES ('${tenantB}', 'Vaca B', 'B1', 'Hembra', 'Vaca', '${razaId}', '2020-01-01')
-         RETURNING id`
+         RETURNING id`,
       );
       const animalBId = insertResB[0].id;
 
@@ -219,16 +286,23 @@ describe('Potreros Funcional & Regresión (Integration)', () => {
         .post(`/potreros/${pResA.body.id}/asignar`)
         .set('Authorization', `Bearer ${tokenPropietarioA}`)
         .send({ animalIds: [animalBId] });
-      
+
       expect(assignRes.status).toBe(400); // Lanzado por BadRequestException custom
-      expect(assignRes.body.message).toContain('Uno o más animales proporcionados no existen');
+      expect(assignRes.body.message).toContain(
+        'Uno o más animales proporcionados no existen',
+      );
     });
 
     it('Debe rechazar la asignación si se envía un ID de animal inexistente', async () => {
       const pRes = await request(app.getHttpServer())
         .post('/potreros')
         .set('Authorization', `Bearer ${tokenPropietarioA}`)
-        .send({ nombre: 'Potrero A', areaHa: 10, capacidadRecomendadaUaHa: 1, diasDescansoRecomendados: 30 });
+        .send({
+          nombre: 'Potrero A',
+          areaHa: 10,
+          capacidadRecomendadaUaHa: 1,
+          diasDescansoRecomendados: 30,
+        });
 
       const fakeAnimalId = 'ffffffff-ffff-4fff-afff-ffffffffffff';
       const assignRes = await request(app.getHttpServer())
@@ -237,7 +311,9 @@ describe('Potreros Funcional & Regresión (Integration)', () => {
         .send({ animalIds: [fakeAnimalId] });
 
       expect(assignRes.status).toBe(400);
-      expect(assignRes.body.message).toContain('Uno o más animales proporcionados no existen');
+      expect(assignRes.body.message).toContain(
+        'Uno o más animales proporcionados no existen',
+      );
     });
   });
 });

@@ -1,31 +1,30 @@
 import {
-  IsDateString,
   IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
+  MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import type {
   MetodoDiagnostico,
   ResultadoDiagnostico,
 } from '../entities/evento-diagnostico.entity.js';
+import { EsFechaDeEvento } from './validators/fecha-evento.validator.js';
 
 export class RegistrarDiagnosticoDto {
   @ApiProperty({
-    description: 'Fecha en que se realizó el diagnóstico (YYYY-MM-DD)',
-    example: '2026-10-26',
+    description:
+      'Fecha en que se realizó el diagnóstico (YYYY-MM-DD). No puede ser futura.',
+    example: '2026-09-10',
   })
-  @IsDateString(
-    {},
-    { message: 'La fecha del diagnóstico debe tener formato válido (YYYY-MM-DD)' },
-  )
-  @IsNotEmpty({ message: 'La fecha del diagnóstico es requerida' })
+  @EsFechaDeEvento('del diagnóstico')
   fechaEvento: string;
 
   @ApiProperty({
-    description: 'ID del evento de servicio al que corresponde este diagnóstico',
+    description:
+      'ID del evento de servicio al que corresponde este diagnóstico',
     example: 'a0b9432d-cf48-4be7-a2f0-1a76c66cfcb1',
   })
   @IsUUID('4', { message: 'El eventoServicioId debe ser un UUID válido' })
@@ -59,6 +58,9 @@ export class RegistrarDiagnosticoDto {
     example: 'Cuerpo lúteo palpable en cuerno derecho, ~40 días de desarrollo',
   })
   @IsString({ message: 'Las notas deben ser texto' })
+  @MaxLength(2000, {
+    message: 'Las notas no pueden superar los 2000 caracteres',
+  })
   @IsOptional()
   notas?: string;
 

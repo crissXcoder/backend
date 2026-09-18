@@ -1,4 +1,30 @@
-import { IsString, IsUUID, IsOptional, IsBoolean, IsNumber, IsDateString } from 'class-validator';
+import {
+  IsString,
+  IsUUID,
+  IsOptional,
+  IsIn,
+  IsNumber,
+  IsDateString,
+} from 'class-validator';
+
+/** La base tiene CHECK (sexo IN ('Hembra','Macho')). */
+export const SEXOS = ['Hembra', 'Macho'] as const;
+
+/**
+ * Categorías del hato. No hay CHECK en la base todavía, pero
+ * `PotrerosService.calcularEstadoPotrero` compara contra estos valores exactos
+ * para calcular las unidades animal, así que un valor libre rompía el cálculo
+ * de carga en silencio.
+ */
+export const CATEGORIAS_ANIMAL = [
+  'Ternero',
+  'Ternera',
+  'Novillo',
+  'Novillo mayor',
+  'Novilla',
+  'Vaca',
+  'Toro',
+] as const;
 
 export class CreateAnimalDto {
   @IsString()
@@ -11,8 +37,10 @@ export class CreateAnimalDto {
   @IsOptional()
   numeroOficialDiio?: string;
 
-  @IsString()
-  sexo: string;
+  // Antes era @IsString(): un valor fuera del catálogo pasaba la validación y
+  // reventaba contra el CHECK de Postgres como error 500.
+  @IsIn(SEXOS, { message: "El sexo debe ser 'Hembra' o 'Macho'" })
+  sexo: (typeof SEXOS)[number];
 
   @IsUUID()
   razaId: string;
@@ -21,8 +49,10 @@ export class CreateAnimalDto {
   @IsOptional()
   razaOtra?: string;
 
-  @IsString()
-  categoria: string;
+  @IsIn(CATEGORIAS_ANIMAL, {
+    message: `La categoría debe ser una de: ${CATEGORIAS_ANIMAL.join(', ')}`,
+  })
+  categoria: (typeof CATEGORIAS_ANIMAL)[number];
 
   @IsUUID()
   @IsOptional()
@@ -52,9 +82,10 @@ export class CreateAnimalDto {
   @IsOptional()
   padreExternoDescripcion?: string;
 
-  @IsBoolean()
-  @IsOptional()
-  activo?: boolean;
+  // `activo` no se acepta desde el cliente: un alta siempre entra activa, y la
+  // baja tiene su propio endpoint (POST /animales/:id/baja) con su DTO y sus
+  // reglas. Permitirlo acá dejaba crear un animal ya dado de baja, saltándose
+  // el motivo, la fecha y el tipo de baja.
 
   @IsString()
   @IsOptional()

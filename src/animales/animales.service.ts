@@ -1,26 +1,46 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { EntityManager } from 'typeorm';
 import { Animal } from './entities/animal.entity.js';
 import { DocumentoAnimal } from './entities/documento-animal.entity.js';
+import type { CreateAnimalDto } from './dto/create-animal.dto.js';
+import type { UpdateAnimalDto } from './dto/update-animal.dto.js';
+import type { BajaAnimalDto } from './dto/baja-animal.dto.js';
+import type { CreateDocumentoDto } from './dto/create-documento.dto.js';
+import type { QueryAnimalDto } from './dto/query-animal.dto.js';
 
 @Injectable()
 export class AnimalesService {
-  async findAll(tenantId: string, query: any, manager: EntityManager) {
-    const qb = manager.createQueryBuilder(Animal, 'animal')
+  async findAll(
+    tenantId: string,
+    query: QueryAnimalDto,
+    manager: EntityManager,
+  ) {
+    const qb = manager
+      .createQueryBuilder(Animal, 'animal')
       .leftJoinAndSelect('animal.raza', 'raza')
       .leftJoinAndSelect('animal.potrero', 'potrero')
       .where('animal.tenant_id = :tenantId', { tenantId });
 
     if (query.activo !== undefined) {
-      qb.andWhere('animal.activo = :activo', { activo: query.activo === 'true' });
+      qb.andWhere('animal.activo = :activo', {
+        activo: query.activo === 'true',
+      });
     }
-    
+
     if (query.categoria) {
-      qb.andWhere('animal.categoria = :categoria', { categoria: query.categoria });
+      qb.andWhere('animal.categoria = :categoria', {
+        categoria: query.categoria,
+      });
     }
 
     if (query.arete) {
-      qb.andWhere('animal.arete_interno ILIKE :arete', { arete: `%${query.arete}%` });
+      qb.andWhere('animal.arete_interno ILIKE :arete', {
+        arete: `%${query.arete}%`,
+      });
     }
 
     qb.orderBy('animal.arete_interno', 'ASC');
@@ -41,82 +61,105 @@ export class AnimalesService {
     return animal;
   }
 
-  async create(tenantId: string, createAnimalDto: any, manager: EntityManager) {
-    // Sanitizar campos vacíos que causan error en la base de datos
-    const payload = { ...createAnimalDto };
-    if (payload.madreId === '') payload.madreId = null;
-    if (payload.padreId === '') payload.padreId = null;
-    if (payload.pesoActualKg === '') payload.pesoActualKg = null;
-    if (payload.valorCompraCrc === '') payload.valorCompraCrc = null;
-    if (payload.fechaNacimiento === '') payload.fechaNacimiento = null;
-    if (payload.fechaCompra === '') payload.fechaCompra = null;
-    if (payload.potreroId === '') payload.potreroId = null;
+  /**
+   * Convierte a null las cadenas vacías de los campos opcionales.
+   *
+   * El frontend envía `''` en vez de omitir el campo cuando el usuario deja un
+   * input en blanco, y Postgres rechaza `''` en columnas uuid, date y numeric.
+   */
+  private normalizarOpcionales(
+    dto: CreateAnimalDto | UpdateAnimalDto,
+  ): Record<string, unknown> {
+    const CAMPOS_OPCIONALES = [
+      'madreId',
+      'padreId',
+      'pesoActualKg',
+      'valorCompraCrc',
+      'fechaNacimiento',
+      'fechaCompra',
+      'potreroId',
+    ];
 
-    try {
-      const animal = manager.create(Animal, {
-        ...payload,
-        tenantId,
-      });
-      return await manager.save(animal);
-    } catch (error: any) {
-      if (error.code === '23505') { // Unique violation
-        throw new BadRequestException('Ya existe un animal con ese arete interno.');
+    const payload: Record<string, unknown> = { ...dto };
+    for (const campo of CAMPOS_OPCIONALES) {
+      if (payload[campo] === '') {
+        payload[campo] = null;
       }
-      throw error;
     }
+    return payload;
   }
 
-  async update(id: string, tenantId: string, updateAnimalDto: any, manager: EntityManager) {
-    const payload = { ...updateAnimalDto };
-    if (payload.madreId === '') payload.madreId = null;
-    if (payload.padreId === '') payload.padreId = null;
-    if (payload.pesoActualKg === '') payload.pesoActualKg = null;
-    if (payload.valorCompraCrc === '') payload.valorCompraCrc = null;
-    if (payload.fechaNacimiento === '') payload.fechaNacimiento = null;
-    if (payload.fechaCompra === '') payload.fechaCompra = null;
-    if (payload.potreroId === '') payload.potreroId = null;
-
-    const animal = await this.findOne(id, tenantId, manager);
-    manager.merge(Animal, animal, payload);
-    
-    try {
-      return await manager.save(animal);
-    } catch (error: any) {
-      if (error.code === '23505') { // Unique violation
-        throw new BadRequestException('Ya existe un animal con ese arete interno.');
-      }
-      throw error;
-    }
+  async create(
+    tenantId: string,
+    createAnimalDto: CreateAnimalDto,
+    manager: EntityManager,
+  ) {
+    // El manejo de la violación de unicidad (23505) ya no vive acá: lo traduce
+    // AllExceptionsFilter, que lo convierte en 409 Conflict para todo el
+    // proyecto en vez de un 400 distinto por cada servicio.
+    const animal = manager.create(Animal, {
+      ...this.normalizarOpcionales(createAnimalDto),
+      tenantId,
+    });
+    return manager.save(animal);
   }
 
-  async darDeBaja(id: string, tenantId: string, bajaDto: any, manager: EntityManager) {
+  async update(
+    id: string,
+    tenantId: string,
+    updateAnimalDto: UpdateAnimalDto,
+    manager: EntityManager,
+  ) {
     const animal = await this.findOne(id, tenantId, manager);
-    
+    manager.merge(Animal, animal, this.normalizarOpcionales(updateAnimalDto));
+    return manager.save(animal);
+  }
+
+  async darDeBaja(
+    id: string,
+    tenantId: string,
+    bajaDto: BajaAnimalDto,
+    manager: EntityManager,
+  ) {
+    const animal = await this.findOne(id, tenantId, manager);
+
     if (!animal.activo) {
-      throw new BadRequestException('El animal ya está de baja.');
+      throw new ConflictException('El animal ya está de baja.');
     }
 
+    // Los campos opcionales se normalizan a null: las columnas son nullable, y
+    // asignar `undefined` hace que TypeORM omita la columna en el UPDATE en vez
+    // de limpiarla.
     animal.activo = false;
     animal.tipoBaja = bajaDto.tipoBaja;
-    animal.motivoBaja = bajaDto.motivoBaja;
+    animal.motivoBaja = bajaDto.motivoBaja ?? null;
     animal.fechaBaja = bajaDto.fechaBaja;
-    animal.precioVentaCrc = bajaDto.precioVentaCrc;
-    animal.pesoFinalKg = bajaDto.pesoFinalKg;
+    animal.precioVentaCrc = bajaDto.precioVentaCrc ?? null;
+    animal.pesoFinalKg = bajaDto.pesoFinalKg ?? null;
 
     return await manager.save(animal);
   }
 
-  async getDocumentos(animalId: string, tenantId: string, manager: EntityManager) {
+  async getDocumentos(
+    animalId: string,
+    tenantId: string,
+    manager: EntityManager,
+  ) {
     // Verificar que el animal existe y pertenece al tenant
     await this.findOne(animalId, tenantId, manager);
-    
+
     return manager.find(DocumentoAnimal, {
       where: { animalId, tenantId },
-      order: { createdAt: 'DESC' }
+      order: { createdAt: 'DESC' },
     });
   }
 
-  async createDocumento(animalId: string, tenantId: string, docDto: any, manager: EntityManager) {
+  async createDocumento(
+    animalId: string,
+    tenantId: string,
+    docDto: CreateDocumentoDto,
+    manager: EntityManager,
+  ) {
     // Verificar que el animal existe y pertenece al tenant
     await this.findOne(animalId, tenantId, manager);
 
@@ -126,7 +169,7 @@ export class AnimalesService {
       tipo: docDto.tipo,
       archivoUrl: docDto.archivoUrl,
     });
-    
+
     return manager.save(doc);
   }
 }

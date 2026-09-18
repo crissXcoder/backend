@@ -1,4 +1,13 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, Unique } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
+  Unique,
+} from 'typeorm';
 import { CatalogoRaza } from '../../catalogos/entities/catalogo-raza.entity.js';
 import { Potrero } from '../../potreros/entities/potrero.entity.js';
 
@@ -39,16 +48,22 @@ export class Animal {
   @Column({ name: 'potrero_id', type: 'uuid', nullable: true })
   potreroId: string | null;
 
-  @ManyToOne(() => Potrero, potrero => potrero.animales)
+  @ManyToOne(() => Potrero, (potrero) => potrero.animales)
   @JoinColumn({ name: 'potrero_id' })
   potrero: Potrero | null;
 
   @Column({ name: 'fecha_nacimiento', type: 'date', nullable: true })
   fechaNacimiento: string | null; // Date as string 'YYYY-MM-DD'
 
-  @Column({ name: 'peso_actual_kg', type: 'numeric', precision: 6, scale: 1, nullable: true })
+  @Column({
+    name: 'peso_actual_kg',
+    type: 'numeric',
+    precision: 6,
+    scale: 1,
+    nullable: true,
+  })
   pesoActualKg: number | null;
-  
+
   @Column({ name: 'foto_url', type: 'text', nullable: true })
   fotoUrl: string | null;
 
@@ -81,11 +96,26 @@ export class Animal {
   @Column({ name: 'motivo_baja', type: 'text', nullable: true })
   motivoBaja: string | null;
 
-  @Column({ name: 'precio_venta_crc', type: 'numeric', precision: 12, scale: 2, nullable: true })
-  precioVentaCrc?: number;
+  // `| null` en vez de `?`: la columna es nullable, igual que fecha_baja,
+  // tipo_baja y motivo_baja, que sí lo declaraban así. Con `?` no se podía
+  // limpiar el valor, porque TypeORM omite del UPDATE las propiedades undefined.
+  @Column({
+    name: 'precio_venta_crc',
+    type: 'numeric',
+    precision: 12,
+    scale: 2,
+    nullable: true,
+  })
+  precioVentaCrc: number | null;
 
-  @Column({ name: 'peso_final_kg', type: 'numeric', precision: 6, scale: 1, nullable: true })
-  pesoFinalKg?: number;
+  @Column({
+    name: 'peso_final_kg',
+    type: 'numeric',
+    precision: 6,
+    scale: 1,
+    nullable: true,
+  })
+  pesoFinalKg: number | null;
 
   // Nuevos campos de compra/origen
   @Column({ name: 'origen', type: 'text', nullable: true })
@@ -97,7 +127,13 @@ export class Animal {
   @Column({ name: 'fecha_compra', type: 'date', nullable: true })
   fechaCompra?: string;
 
-  @Column({ name: 'valor_compra_crc', type: 'numeric', precision: 12, scale: 2, nullable: true })
+  @Column({
+    name: 'valor_compra_crc',
+    type: 'numeric',
+    precision: 12,
+    scale: 2,
+    nullable: true,
+  })
   valorCompraCrc?: number;
 
   @Column({ name: 'numero_guia', type: 'text', nullable: true })
@@ -106,7 +142,12 @@ export class Animal {
   @Column({ name: 'metodo_compra', type: 'text', nullable: true })
   metodoCompra?: 'Sinpe' | 'Depósito' | 'Efectivo' | 'Combinado';
 
-  @Column({ name: 'metodos_combinados', type: 'text', array: true, nullable: true })
+  @Column({
+    name: 'metodos_combinados',
+    type: 'text',
+    array: true,
+    nullable: true,
+  })
   metodosCombinados?: string[];
 
   @Column({ name: 'referencia_pago', type: 'text', nullable: true })
