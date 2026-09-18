@@ -218,6 +218,127 @@ resolvamos en el próximo seguimiento y que quede registrado en
 
 ---
 
+## Pendientes nuevos — sesión de frontend Reproductivo (18 de setiembre de 2026)
+
+Construyendo la pestaña "Ciclo Reproductivo" del Expediente (repo `frontend`, no `backend`) encontré
+problemas en pantallas de ustedes que **no toqué**, porque son sus archivos y algunos exceden lo que me
+corresponde decidir solo. Quedan documentados acá para que cada quien decida.
+
+### Danny — MOD-01 Hato/Expediente y MOD-05 Potreros (frontend)
+
+**17. `ModalServicio.tsx` y `ModalDiagnostico.tsx` quedaron sin uso**
+
+`components/modals/ModalServicio.tsx`, `components/modals/ModalDiagnostico.tsx`
+
+La pestaña "Ciclo Reproductivo" de `app/(dashboard)/hato/[id]/page.tsx` ahora monta
+`<TabReproductivo>`, que trae sus propios formularios (`components/reproductivo/forms/`). Estos dos
+modales dejaron de estar referenciados desde esa pestaña, pero no los borré: es tu carpeta y tu decisión.
+Si nada más los usa, se pueden eliminar junto con los `useState`/mutations que quedaron huérfanos en
+`page.tsx` (`isServicioOpen`, `isDiagnosticoOpen`, `diagnosticoServicioId`, `servicioMutation`,
+`diagnosticoMutation` y sus renders del modal al final del archivo).
+
+**18. Colores crudos de Tailwind en vez de tokens de `design.md`**
+
+- `app/(dashboard)/hato/[id]/page.tsx:766-791` — props de Recharts (`stroke="#f1f5f9"`,
+  `fill: '#94a3b8'`, `stroke="#0284c7"`, `stroke="#10b981"`, etc.) en las gráficas de leche y peso.
+  Recharts sí necesita valores literales en sus props (no toma clases de Tailwind), así que si se
+  quedan hay que marcarlos `// design-exception: Recharts requiere hex/rgb en sus props` para que el
+  script de verificación de `design.md` §1 no los marque como violación sin explicación — hoy no tienen
+  esa marca.
+- `app/(dashboard)/potreros/[id]/page.tsx:140,147,154,162,163,166` — `bg-[#eefaf2]`,
+  `stroke="#d1fae5"`, `stroke="#10b981"`, `text-[#059669]`, `text-[10px] text-[#10b981]`. Ninguno tiene
+  la marca `design-exception`; los de fuera de Recharts (`bg-[#eefaf2]`, `text-[#059669]`) deberían pasar
+  a `bg-success-bg`/`text-success`, que es justo lo que significan.
+- `app/(dashboard)/potreros/asignar/page.tsx:211` — `disabled:bg-[#94A3B8]` es literalmente
+  `slate-400`; cambia a `disabled:bg-slate-400`.
+
+**19. `Animal.sexo` tipado como `string` suelto**
+
+`lib/api/animales.ts:15`
+
+En la práctica solo vale `'Hembra'` o `'Macho'` (así lo usa el propio archivo en `:358` y `:463-464`, y
+así lo valida el backend con `@IsIn`). Tiparlo `'Hembra' | 'Macho'` evita que un typo en un formulario
+nuevo pase el compilador.
+
+**20. Comentario de incertidumbre sin resolver**
+
+`lib/api/animales.ts:6` — `dias_gestacion: number; // In DB it's dias_gestacion? Wait, catalogo_raza
+entity. Let's check it later.` El backend confirma que sí es `dias_gestacion` (columna real de
+`catalogo_raza`); se puede borrar el comentario.
+
+**21. `getPublicUrl()` pendiente de migrar a `createSignedUrl()`**
+
+`app/(dashboard)/hato/nuevo/page.tsx:107`, `app/(dashboard)/hato/[id]/page.tsx:197`
+
+Ver el punto 22 y el runbook `docs/runbooks/03-storage-animal-docs.md`: son 2 de los 3 usos que hay que
+migrar antes de poder pasar el bucket `animal_docs` a privado.
+
+### Ari — MOD-02 Sanitario (frontend)
+
+**22. `getPublicUrl()` pendiente de migrar a `createSignedUrl()`**
+
+`components/modals/ModalTratamiento.tsx:98`
+
+Mismo caso que el punto 21, es el tercer y último uso en todo el frontend. El bucket `animal_docs` no
+puede pasar a privado (`docs/runbooks/03-storage-animal-docs.md`) hasta que los tres estén migrados —
+es una migración coordinada entre Danny y vos, no algo que uno solo pueda cerrar.
+
+**23. No hay pantalla propia de Sanitario todavía**
+
+Todo lo sanitario que existe en el frontend hoy es el modal `ModalTratamiento` dentro de la ficha del
+animal; no hay una vista de catálogo de medicamentos/padecimientos ni de historial sanitario aparte
+(a diferencia de reproductivo, que ya tiene su propia pestaña con historial completo). Si la rúbrica pide
+una pantalla dedicada a MOD-02, falta construirla.
+
+### Karla — MOD-04 Dashboard (frontend)
+
+**24. El feed reproductivo del dashboard sigue en mock**
+
+`lib/hooks/use-dashboard-data.ts:74-79` (`useProximosEventosReproductivos`)
+
+El endpoint real ya está listo y tipado en `lib/api/reproductivo.ts` (`getProximosEventos`), con el
+contrato completo en `lib/reproductivo/tipos.ts`. Cuando decidas conectarlo, el cambio es una línea
+(`queryFn: () => getProximosEventos()` en vez de `Promise.resolve(getMockProximosEventosReproductivos())`)
+— lo dejé sin tocar a propósito porque es tu hook y tu prueba con datos reales.
+
+**25. `status-badge.tsx` y `badge.tsx` no usan los tokens de `design.md`**
+
+`components/dashboard/status-badge.tsx:16-21`, `components/ui/badge.tsx:39-51`
+
+`badge.tsx` usa paleta cruda de Tailwind (`bg-emerald-50`, `bg-amber-50`, `bg-fuchsia-100`,
+`bg-blue-100`...) en vez de las clases semánticas (`bg-success-bg`, `bg-warning-bg`, etc.) que
+`design.md` §7-§8 exige. Su comentario de cabecera cita "DESIGN.md §5.5", que no existe — la tabla real
+de colores es la §7.
+
+Consecuencia concreta: `status-badge.tsx:19` mapea `palpacion` (que §7 clasifica como Información) a la
+variante `"male"` (azul de sexo, fuchsia/blue), que no es un token de estado — es el color reservado para
+filtrar hembra/macho. Cuando conectes el punto 24, el feed real también trae `'Secado'` y
+`'Aviso Parto Urgente'`, que `DashboardStatusVariant` (`:14`) todavía no contempla.
+
+**26. `notification-bell.tsx` con solo 3 categorías, faltan 2**
+
+`components/dashboard/notification-bell.tsx:16-19` (`categoriaLabel`) y
+`lib/types/dashboard.ts:44` (`CategoriaAlerta`)
+
+`CategoriaAlerta` sigue en `"retiro" | "palpacion" | "parto"`. El feed real (`TipoEventoReproductivo`,
+ya corregido en este mismo archivo, punto anterior de esta sesión) tiene 5 valores y un flag `urgente`.
+Si las alertas de la campana van a alimentarse del feed real, hace falta agregar `"secado"` y una
+categoría para el aviso urgente (o usar `urgente` para resaltar visualmente la de `"parto"` existente).
+
+### Los cuatro
+
+**27. ~~Nav "Reproducción" del Sidebar apunta a un link muerto~~ — resuelto**
+
+`components/layout/Sidebar.tsx:34` apuntaba a `href: '#'`. Ahora apunta a `/reproductivo`, ruta nueva:
+`app/(dashboard)/reproductivo/page.tsx` — calendario reproductivo de toda la finca sobre
+`GET /reproductivo/proximos-eventos` (`useProximosEventosFinca` en `lib/hooks/use-reproductivo.ts`),
+con tarjetas de resumen (hitos en ventana, avisos urgentes, vencidos), filtro por tipo de hito, selector
+de ventana (30/60/90/180 días) y enlace directo a la ficha de cada animal. `lib/supabase/middleware.ts:55`
+ya protegía `/reproductivo`, así que no hizo falta tocar el proxy. Comparte clave de query con el feed del
+dashboard de Karla (punto 24): registrar un evento desde cualquier pestaña actualiza ambas pantallas solo.
+
+---
+
 ## Lo que necesitan hacer ustedes
 
 1. `git pull` en `backend`.
