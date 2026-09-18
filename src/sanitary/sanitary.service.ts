@@ -1,5 +1,5 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { Injectable, Logger } from '@nestjs/common';
+import type { EntityManager } from 'typeorm';
 import { Medicamento } from './entities/medicamento.entity.js';
 import { Padecimiento } from './entities/padecimiento.entity.js';
 
@@ -92,60 +92,62 @@ export const PADECIMIENTOS_BASE = [
  * Filtra siempre por `tenant_id` del usuario autenticado.
  * Si DataSource no está inicializado, opera en modo catálogo base en memoria (mismo patrón que AuthModule).
  */
+/**
+ * Catálogos sanitarios.
+ *
+ * Cambio importante respecto de la versión anterior: los errores de base de
+ * datos ya NO se convierten en un catálogo en memoria.
+ *
+ * Antes, cualquier fallo (incluido el `EntityMetadataNotFoundError` que se
+ * producía siempre, porque SanitaryModule no registraba sus entidades) se
+ * atrapaba con un `logger.warn` y se devolvía el catálogo base con UUID
+ * inventados. El endpoint respondía 200 y nadie se enteraba de que jamás estaba
+ * leyendo la base: un fallo permanente disfrazado de funcionamiento normal.
+ *
+ * Ahora se distinguen los dos casos:
+ *  - Error de consulta: se registra y se propaga. El filtro global lo traduce.
+ *  - Tabla vacía: se devuelve el catálogo de referencia con una advertencia,
+ *    porque una finca recién creada todavía no tiene catálogo propio y dejar la
+ *    pantalla en blanco no ayuda a nadie. Se resuelve con `pnpm seed:sanitary`.
+ */
 @Injectable()
 export class SanitaryService {
   private readonly logger = new Logger(SanitaryService.name);
 
-  constructor(@Optional() private readonly dataSource?: DataSource) {}
+  async getMedicamentos(
+    tenantId: string,
+    manager: EntityManager,
+  ): Promise<Medicamento[]> {
+    const medicamentos = await manager.find(Medicamento, {
+      where: { tenantId },
+      order: { nombreComercial: 'ASC' },
+    });
 
-  /**
-   * Devuelve todos los medicamentos del catálogo para el tenant dado.
-   */
-  async getMedicamentos(tenantId: string): Promise<Medicamento[]> {
-    if (this.dataSource?.isInitialized) {
-      try {
-        const repo = this.dataSource.getRepository(Medicamento);
-        return await repo.find({
-          where: { tenantId },
-          order: { nombreComercial: 'ASC' },
-        });
-      } catch (err) {
-        this.logger.warn(
-          `Error consultando catalogo_medicamento en BD: ${(err as Error).message}. Usando catálogo base.`,
-        );
-      }
-    }
+    if (medicamentos.length > 0) return medicamentos;
 
-    // Modo desacoplado / memoria (catálogo oficial Costa Rica)
-    return MEDICAMENTOS_BASE.map((m, index) => ({
-      id: `00000000-0000-0000-0000-00000000000${index + 1}`,
-      tenantId,
-      ...m,
-    })) as Medicamento[];
+    this.logger.warn(
+      `La finca ${tenantId} no tiene medicamentos en catalogo_medicamento. Se devuelve el catálogo de referencia; para persistirlo, correr 'pnpm seed:sanitary'.`,
+    );
+    return this.catalogoBaseMedicamentos(tenantId);
   }
 
-  /**
-   * Devuelve todos los padecimientos del catálogo para el tenant dado,
-   * incluyendo la relación con el medicamento sugerido.
-   */
-  async getPadecimientos(tenantId: string): Promise<Padecimiento[]> {
-    if (this.dataSource?.isInitialized) {
-      try {
-        const repo = this.dataSource.getRepository(Padecimiento);
-        return await repo.find({
-          where: { tenantId },
-          relations: { medicamentoSugerido: true },
-          order: { nombre: 'ASC' },
-        });
-      } catch (err) {
-        this.logger.warn(
-          `Error consultando catalogo_padecimiento en BD: ${(err as Error).message}. Usando catálogo base.`,
-        );
-      }
-    }
+  async getPadecimientos(
+    tenantId: string,
+    manager: EntityManager,
+  ): Promise<Padecimiento[]> {
+    const padecimientos = await manager.find(Padecimiento, {
+      where: { tenantId },
+      relations: { medicamentoSugerido: true },
+      order: { nombre: 'ASC' },
+    });
 
-    // Modo desacoplado / memoria (catálogo oficial Costa Rica)
-    const meds = await this.getMedicamentos(tenantId);
+    if (padecimientos.length > 0) return padecimientos;
+
+    this.logger.warn(
+      `La finca ${tenantId} no tiene padecimientos en catalogo_padecimiento. Se devuelve el catálogo de referencia; para persistirlo, correr 'pnpm seed:sanitary'.`,
+    );
+
+    const meds = this.catalogoBaseMedicamentos(tenantId);
     return PADECIMIENTOS_BASE.map((p, index) => {
       const suggestedMed = p.medicamentoSugeridoNombre
         ? meds.find((m) => m.nombreComercial === p.medicamentoSugeridoNombre) ||
@@ -161,5 +163,14 @@ export class SanitaryService {
         medicamentoSugerido: suggestedMed,
       };
     }) as Padecimiento[];
+  }
+
+  /** Catálogo de referencia (valores de Reglas-de-Negocio-Ganaderas.md). */
+  private catalogoBaseMedicamentos(tenantId: string): Medicamento[] {
+    return MEDICAMENTOS_BASE.map((m, index) => ({
+      id: `00000000-0000-0000-0000-00000000000${index + 1}`,
+      tenantId,
+      ...m,
+    })) as Medicamento[];
   }
 }

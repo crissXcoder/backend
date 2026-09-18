@@ -1,23 +1,36 @@
-import { MigrationInterface, QueryRunner } from "typeorm";
+import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class AddAnimalPurchaseFields1789538300367 implements MigrationInterface {
-    name = 'AddAnimalPurchaseFields1789538300367'
+  name = 'AddAnimalPurchaseFields1789538300367';
 
-    public async up(queryRunner: QueryRunner): Promise<void> {
+  private static readonly COLUMNAS = [
+    ['origen', 'text'],
+    ['comprado_a', 'text'],
+    ['fecha_compra', 'date'],
+    ['valor_compra_crc', 'numeric(12,2)'],
+    ['numero_guia', 'text'],
+    ['metodo_compra', 'text'],
+    ['metodos_combinados', 'text array'],
+    ['referencia_pago', 'text'],
+  ] as const;
 
-        await queryRunner.query(`ALTER TABLE "animal" ADD "origen" text`);
-        await queryRunner.query(`ALTER TABLE "animal" ADD "comprado_a" text`);
-        await queryRunner.query(`ALTER TABLE "animal" ADD "fecha_compra" date`);
-        await queryRunner.query(`ALTER TABLE "animal" ADD "valor_compra_crc" numeric(12,2)`);
-        await queryRunner.query(`ALTER TABLE "animal" ADD "numero_guia" text`);
-        await queryRunner.query(`ALTER TABLE "animal" ADD "metodo_compra" text`);
-        await queryRunner.query(`ALTER TABLE "animal" ADD "metodos_combinados" text array`);
-        await queryRunner.query(`ALTER TABLE "animal" ADD "referencia_pago" text`);
-
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    for (const [
+      columna,
+      tipo,
+    ] of AddAnimalPurchaseFields1789538300367.COLUMNAS) {
+      await queryRunner.query(
+        `ALTER TABLE "animal" ADD COLUMN IF NOT EXISTS "${columna}" ${tipo}`,
+      );
     }
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    // Antes estaba vacío, lo que hacía la migración irreversible.
+    for (const [columna] of AddAnimalPurchaseFields1789538300367.COLUMNAS) {
+      await queryRunner.query(
+        `ALTER TABLE "animal" DROP COLUMN IF EXISTS "${columna}"`,
+      );
     }
-
+  }
 }

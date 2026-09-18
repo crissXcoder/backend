@@ -9,11 +9,16 @@ import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import type { EntityManager } from 'typeorm';
 import { ReproductiveController } from '../reproductive.controller.js';
-import { ReproductiveService } from '../services/reproductive.service.js';
+import {
+  ReproductiveService,
+  DIAS_VENTANA_DEFAULT,
+} from '../services/reproductive.service.js';
 import { RolesGuard } from '../../auth/guards/roles.guard.js';
 import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface.js';
 import { RegistrarServicioDto } from '../dto/registrar-servicio.dto.js';
 import { RegistrarDiagnosticoDto } from '../dto/registrar-diagnostico.dto.js';
+import { RegistrarPartoDto } from '../dto/registrar-parto.dto.js';
+import { ProximosEventosQueryDto } from '../dto/proximos-eventos-query.dto.js';
 import type { EstadoReproductivoInfo } from '../interfaces/reproductive-state.interface.js';
 
 describe('ReproductiveController (Controlador REST y Seguridad RBAC)', () => {
@@ -67,6 +72,7 @@ describe('ReproductiveController (Controlador REST y Seguridad RBAC)', () => {
       registrarParto: vi.fn(),
       registrarSecado: vi.fn(),
       obtenerEstadoReproductivo: vi.fn(),
+      obtenerHistorialReproductivo: vi.fn(),
       obtenerProximosEventos: vi.fn(),
     } as unknown as ReproductiveService;
 
@@ -80,15 +86,23 @@ describe('ReproductiveController (Controlador REST y Seguridad RBAC)', () => {
   describe('CRITERIO 1: Seguridad RBAC (RolesGuard)', () => {
     it('CRITERIO 1: Un peon autenticado recibe 403 al intentar POST /animales/:id/servicios', () => {
       // El handler registrarServicio tiene @Roles('propietario', 'administrador', 'veterinario')
-      const rolesDecorados = reflector.get('roles', controller.registrarServicio);
+      const rolesDecorados = reflector.get(
+        'roles',
+        controller.registrarServicio,
+      );
       expect(rolesDecorados).toEqual([
         'propietario',
         'administrador',
         'veterinario',
       ]);
 
-      const contextPeon = createMockContext(mockPeon, controller.registrarServicio);
-      expect(() => rolesGuard.canActivate(contextPeon)).toThrow(ForbiddenException);
+      const contextPeon = createMockContext(
+        mockPeon,
+        controller.registrarServicio,
+      );
+      expect(() => rolesGuard.canActivate(contextPeon)).toThrow(
+        ForbiddenException,
+      );
       expect(() => rolesGuard.canActivate(contextPeon)).toThrow(
         /se requiere uno de los roles/i,
       );
@@ -115,7 +129,10 @@ describe('ReproductiveController (Controlador REST y Seguridad RBAC)', () => {
       );
       expect(rolesEstado).toBeUndefined(); // Sin restricción de roles
 
-      const rolesFeed = reflector.get('roles', controller.obtenerProximosEventos);
+      const rolesFeed = reflector.get(
+        'roles',
+        controller.obtenerProximosEventos,
+      );
       expect(rolesFeed).toBeUndefined(); // Sin restricción de roles
 
       const contextPeon = createMockContext(
@@ -135,11 +152,16 @@ describe('ReproductiveController (Controlador REST y Seguridad RBAC)', () => {
         toroOPajilla: 'Pajilla-01',
       };
 
-      const dtoInstance = plainToInstance(RegistrarServicioDto, payloadInvalido);
+      const dtoInstance = plainToInstance(
+        RegistrarServicioDto,
+        payloadInvalido,
+      );
       const errors = await validate(dtoInstance);
 
       expect(errors.length).toBeGreaterThan(0);
-      const tipoServicioError = errors.find((e) => e.property === 'tipoServicio');
+      const tipoServicioError = errors.find(
+        (e) => e.property === 'tipoServicio',
+      );
       expect(tipoServicioError).toBeDefined();
       expect(tipoServicioError?.constraints?.isIn).toBeDefined();
     });
@@ -174,7 +196,10 @@ describe('ReproductiveController (Controlador REST y Seguridad RBAC)', () => {
         resultado: 'Quizás', // Fuera de ['Preñada', 'Vacía']
       };
 
-      const dtoInstance = plainToInstance(RegistrarDiagnosticoDto, payloadInvalido);
+      const dtoInstance = plainToInstance(
+        RegistrarDiagnosticoDto,
+        payloadInvalido,
+      );
       const errors = await validate(dtoInstance);
 
       expect(errors.length).toBe(2);
@@ -187,7 +212,9 @@ describe('ReproductiveController (Controlador REST y Seguridad RBAC)', () => {
     it('CRITERIO 3: GET /animales/:id/estado-reproductivo de un animal de otro tenant devuelve 404 (por RLS al no encontrar fila)', async () => {
       // El servicio lanza NotFoundException si no existe fila para ese tenantId
       vi.spyOn(service, 'obtenerEstadoReproductivo').mockRejectedValue(
-        new NotFoundException("Animal con ID 'vaca-tenant-ajeno' no encontrado."),
+        new NotFoundException(
+          "Animal con ID 'vaca-tenant-ajeno' no encontrado.",
+        ),
       );
 
       await expect(
@@ -214,11 +241,12 @@ describe('ReproductiveController (Controlador REST y Seguridad RBAC)', () => {
             urgente: false,
           },
         ],
-        resumenUltimosEventos: [],
         advertencias: [],
       };
 
-      vi.spyOn(service, 'obtenerEstadoReproductivo').mockResolvedValue(mockEstado);
+      vi.spyOn(service, 'obtenerEstadoReproductivo').mockResolvedValue(
+        mockEstado,
+      );
 
       const result = await controller.obtenerEstadoReproductivo(
         'vaca-1',
@@ -241,21 +269,28 @@ describe('ReproductiveController (Controlador REST y Seguridad RBAC)', () => {
           tipo: 'Palpación',
           fecha: '2026-04-10',
           diasRestantes: 12,
+          urgente: false,
         },
         {
           animalId: 'vaca-102',
           arete: '102',
           nombre: 'Estrella',
-          tipo: 'Parto',
+          tipo: 'Aviso Parto Urgente',
           fecha: '2026-04-15',
           diasRestantes: 17,
+          urgente: true,
         },
       ]);
+
+      // La ventana ya viaja en un DTO validado, no como string suelto parseado
+      // a mano fuera del ValidationPipe.
+      const query = new ProximosEventosQueryDto();
+      query.diasVentana = 60;
 
       const feed = await controller.obtenerProximosEventos(
         mockPropietario,
         mockEntityManager,
-        '60',
+        query,
       );
 
       expect(feed).toHaveLength(2);
@@ -266,12 +301,106 @@ describe('ReproductiveController (Controlador REST y Seguridad RBAC)', () => {
         tipo: 'Palpación',
         fecha: '2026-04-10',
         diasRestantes: 12,
+        urgente: false,
       });
+      // El contrato que consume el Dashboard incluye el aviso urgente de FPP-3.
+      expect(feed[1].tipo).toBe('Aviso Parto Urgente');
+      expect(feed[1].urgente).toBe(true);
+
       expect(service.obtenerProximosEventos).toHaveBeenCalledWith(
         mockPropietario.tenantId,
         mockEntityManager,
         60,
       );
+    });
+
+    it('usa la ventana por defecto cuando el cliente no manda diasVentana', async () => {
+      vi.spyOn(service, 'obtenerProximosEventos').mockResolvedValue([]);
+
+      await controller.obtenerProximosEventos(
+        mockPropietario,
+        mockEntityManager,
+        new ProximosEventosQueryDto(),
+      );
+
+      expect(service.obtenerProximosEventos).toHaveBeenCalledWith(
+        mockPropietario.tenantId,
+        mockEntityManager,
+        DIAS_VENTANA_DEFAULT,
+      );
+    });
+  });
+
+  describe('Historial reproductivo', () => {
+    it('GET /animales/:id/eventos-reproductivos devuelve el historial cronológico, incluidos los revertidos', async () => {
+      const evento = (
+        id: string,
+        tipo: string,
+        fechaEvento: string,
+        revertido: boolean,
+      ) =>
+        ({
+          id,
+          tenantId: mockPropietario.tenantId,
+          animalId: 'vaca-1',
+          tipo,
+          fechaEvento,
+          fechaRegistro: new Date(`${fechaEvento}T08:00:00Z`),
+          usuarioId: 'u1',
+          revertido,
+          eventoCorrigeId: null,
+          notas: null,
+        }) as any;
+
+      const evS = evento('s1', 'SERVICIO', '2026-01-01', true);
+      const evS2 = evento('s2', 'SERVICIO', '2026-01-15', false);
+
+      vi.spyOn(service, 'obtenerHistorialReproductivo').mockResolvedValue([
+        {
+          evento: evS,
+          servicio: {
+            eventoId: 's1',
+            tipoServicio: 'Monta Natural',
+            toroOPajilla: 'Toro equivocado',
+            responsable: null,
+            palpacionFecha: '2026-02-10',
+            secadoFecha: '2026-08-10',
+            avisoPartoFecha: '2026-09-24',
+            avisoPartoUrgenteFecha: '2026-10-06',
+            fpp: '2026-10-09',
+          } as any,
+        },
+        {
+          evento: evS2,
+          servicio: {
+            eventoId: 's2',
+            tipoServicio: 'Inseminación Artificial',
+            toroOPajilla: 'Titan',
+            responsable: 'Dr. Roberto',
+            palpacionFecha: '2026-02-24',
+            secadoFecha: '2026-08-24',
+            avisoPartoFecha: '2026-10-08',
+            avisoPartoUrgenteFecha: '2026-10-20',
+            fpp: '2026-10-23',
+          } as any,
+        },
+      ]);
+
+      const historial = await controller.obtenerHistorialReproductivo(
+        'vaca-1',
+        mockPropietario,
+        mockEntityManager,
+      );
+
+      expect(historial).toHaveLength(2);
+      // El registro es append-only: la corrección tiene que verse, marcada.
+      expect(historial[0].revertido).toBe(true);
+      expect(historial[1].revertido).toBe(false);
+      expect(historial.map((h) => h.fechaEvento)).toEqual([
+        '2026-01-01',
+        '2026-01-15',
+      ]);
+      expect((historial[1].detalle as any).toroOPajilla).toBe('Titan');
     });
   });
 });

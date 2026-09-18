@@ -47,6 +47,26 @@ export interface ResumenSecadoActivo {
   fecha: string;
 }
 
+/**
+ * Tipos de hito que la máquina de estados puede emitir.
+ *
+ * `Aviso Parto` y `Aviso Parto Urgente` son dos hitos distintos a propósito.
+ * Reglas-de-Negocio-Ganaderas.md los pide separados: "FPP - 15 días y FPP - 3
+ * días (dos alertas separadas, ambas útiles para que el productor prepare el
+ * corral de maternidad)". Colapsarlos en uno pierde justamente la señal que
+ * distingue "preparate" de "es ya".
+ */
+export type TipoHitoReproductivo =
+  'Palpación' | 'Secado' | 'Aviso Parto' | 'Aviso Parto Urgente' | 'Parto FPP';
+
+export interface HitoReproductivo {
+  tipo: TipoHitoReproductivo;
+  fecha: string;
+  diasRestantes: number;
+  /** true solo en el aviso de FPP - 3 días. */
+  urgente: boolean;
+}
+
 export interface EstadoReproductivoInfo {
   animalId: string;
   areteInterno: string;
@@ -54,13 +74,17 @@ export interface EstadoReproductivoInfo {
   razaNombre?: string;
   diasGestacionRaza?: number;
   estadoActual: EstadoReproductivo;
+  /** Días transcurridos desde el evento que dejó al animal en el estado actual. */
+  diasEnEstado?: number;
   servicioActivo?: ResumenServicioActivo;
   ultimoDiagnostico?: ResumenDiagnosticoActivo;
   ultimoParto?: ResumenPartoActivo;
   ultimoSecado?: ResumenSecadoActivo;
-  proximosHitos?: {
-    tipo: 'Palpación' | 'Secado' | 'Aviso Parto' | 'Parto FPP';
-    fecha: string;
-    diasRestantes: number;
-  }[];
+  proximosHitos?: HitoReproductivo[];
+  /**
+   * Inconsistencias detectadas al derivar el estado (por ejemplo, un evento sin
+   * su fila de detalle). Antes estos casos se ignoraban en silencio y producían
+   * un estado incorrecto sin ninguna señal.
+   */
+  advertencias?: string[];
 }

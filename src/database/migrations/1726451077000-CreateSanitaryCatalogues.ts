@@ -1,16 +1,24 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class CreateSanitaryCatalogues1726451077000
-  implements MigrationInterface
-{
+export class CreateSanitaryCatalogues1726451077000 implements MigrationInterface {
   name = 'CreateSanitaryCatalogues1726451077000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
+    // NOTA DE ORDEN (corrección de idempotencia, no cambia el estado de ninguna
+    // base ya migrada): el timestamp de esta migración (1726451077000) ordena
+    // ANTES de CreateAuthAndTenantTables1789398090023, que es la que crea
+    // public.tenant. Con la FK declarada en línea, una base limpia fallaba acá.
+    // No se puede re-timestampar sin romper las bases ya migradas, así que la
+    // FK se saca de acá y la repone RestoreSanitaryCatalogueFKs1789740000003.
+    // En la base compartida esas FK ya habían sido eliminadas por
+    // Potreros1789665361014 y nunca repuestas, así que la migración nueva deja
+    // ambos escenarios en el mismo estado final.
+
     // 1. Crear tabla catalogo_medicamento
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS public.catalogo_medicamento (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        tenant_id UUID NOT NULL REFERENCES public.tenant(id) ON DELETE RESTRICT,
+        tenant_id UUID NOT NULL,
         nombre_comercial TEXT NOT NULL,
         principio_activo TEXT,
         via_administracion TEXT,
@@ -29,7 +37,7 @@ export class CreateSanitaryCatalogues1726451077000
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS public.catalogo_padecimiento (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        tenant_id UUID NOT NULL REFERENCES public.tenant(id) ON DELETE RESTRICT,
+        tenant_id UUID NOT NULL,
         nombre TEXT NOT NULL,
         categoria TEXT,
         medicamento_sugerido_id UUID REFERENCES public.catalogo_medicamento(id) ON DELETE SET NULL
@@ -53,6 +61,9 @@ export class CreateSanitaryCatalogues1726451077000
 
     // 4. Políticas de aislamiento multi-tenant (mismo patrón que tenant/usuario)
     await queryRunner.query(`
+      DROP POLICY IF EXISTS catalogo_medicamento_isolation_policy ON public.catalogo_medicamento;
+    `);
+    await queryRunner.query(`
       CREATE POLICY catalogo_medicamento_isolation_policy
         ON public.catalogo_medicamento
         FOR ALL
@@ -61,6 +72,9 @@ export class CreateSanitaryCatalogues1726451077000
         WITH CHECK (tenant_id = (auth.jwt() ->> 'tenant_id')::uuid);
     `);
 
+    await queryRunner.query(`
+      DROP POLICY IF EXISTS catalogo_padecimiento_isolation_policy ON public.catalogo_padecimiento;
+    `);
     await queryRunner.query(`
       CREATE POLICY catalogo_padecimiento_isolation_policy
         ON public.catalogo_padecimiento

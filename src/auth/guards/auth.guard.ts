@@ -2,6 +2,7 @@ import {
   Injectable,
   CanActivate,
   ExecutionContext,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
@@ -26,6 +27,8 @@ const ROLES_VALIDOS: readonly RolUsuario[] = [
 
 @Injectable()
 export class AuthGuard implements CanActivate {
+  private readonly logger = new Logger(AuthGuard.name);
+
   constructor(
     private readonly reflector: Reflector,
     private readonly jwtService: SupabaseJwtService,
@@ -47,7 +50,9 @@ export class AuthGuard implements CanActivate {
     const token = this.extractTokenFromHeader(request);
 
     if (!token) {
-      console.log('AuthGuard: Falla porque no hay token en el header Authorization');
+      this.logger.debug(
+        'Petición sin Bearer token en el encabezado Authorization.',
+      );
       throw new UnauthorizedException(
         'Encabezado Authorization con Bearer token requerido',
       );
@@ -61,19 +66,27 @@ export class AuthGuard implements CanActivate {
         unknown
       >;
     } catch (error) {
-      console.log('AuthGuard: Falla en verifyToken', (error as Error).message);
+      // El detalle de `jose` (algoritmo, claim que falló, desfase del reloj)
+      // queda solo en el log: decirle a un atacante por qué falló su token le
+      // ahorra trabajo.
+      this.logger.warn(
+        `Verificación de JWT fallida: ${(error as Error).message}`,
+      );
       throw new UnauthorizedException(
-        `Token de autenticación inválido o expirado: ${(error as Error).message}`,
+        'Token de autenticación inválido o expirado.',
       );
     }
 
     // 4. Extraer y validar claims inyectadas por el Custom Access Token Hook o desde app_metadata
-    const appMetadata = payload['app_metadata'] as Record<string, unknown> | undefined;
-    let tenantId = (payload['tenant_id'] || (appMetadata && appMetadata['tenant_id'])) as string | undefined;
-    let rol = (payload['rol'] || (appMetadata && appMetadata['rol'])) as RolUsuario | undefined;
+    const appMetadata = payload['app_metadata'] as
+      Record<string, unknown> | undefined;
+    const tenantId = (payload['tenant_id'] ||
+      (appMetadata && appMetadata['tenant_id'])) as string | undefined;
+    const rol = (payload['rol'] || (appMetadata && appMetadata['rol'])) as
+      RolUsuario | undefined;
 
     if (!tenantId || !rol) {
-      console.error('AuthGuard: Faltan claims en JWT (tenant_id o rol).');
+      this.logger.warn('JWT sin claims de tenant_id o rol.');
       throw new UnauthorizedException(
         'El token de autenticación no contiene claims de tenant_id o rol.',
       );
@@ -89,7 +102,9 @@ export class AuthGuard implements CanActivate {
     const email = (payload['email'] || '') as string;
 
     if (!userId) {
-      throw new UnauthorizedException('El token no contiene identificador de usuario (sub).');
+      throw new UnauthorizedException(
+        'El token no contiene identificador de usuario (sub).',
+      );
     }
 
     // 5. Adjuntar usuario tipado a la petición

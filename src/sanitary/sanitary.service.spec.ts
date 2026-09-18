@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { DataSource } from 'typeorm';
+import type { EntityManager } from 'typeorm';
 import {
   SanitaryService,
   MEDICAMENTOS_BASE,
@@ -34,19 +34,67 @@ const mockDbPadecimientos: Partial<Padecimiento>[] = [
 ];
 
 describe('SanitaryService', () => {
-  describe('Modo desacoplado / Memoria (sin DataSource)', () => {
-    let service: SanitaryService;
+  let service: SanitaryService;
+  const mockFind = vi.fn();
 
-    beforeEach(async () => {
-      const module: TestingModule = await Test.createTestingModule({
-        providers: [SanitaryService],
-      }).compile();
+  // El servicio recibe el EntityManager de la transacción RLS, en vez de abrir
+  // su propia conexión con un DataSource global.
+  const managerDe = (impl: typeof mockFind) =>
+    ({ find: impl }) as unknown as EntityManager;
 
-      service = module.get<SanitaryService>(SanitaryService);
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [SanitaryService],
+    }).compile();
+
+    service = module.get<SanitaryService>(SanitaryService);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('Lectura desde la base de datos', () => {
+    it('consulta catalogo_medicamento filtrado por tenantId y devuelve lo que hay en la base', async () => {
+      mockFind.mockResolvedValue(mockDbMedicamentos);
+
+      const result = await service.getMedicamentos(
+        TENANT_ID,
+        managerDe(mockFind),
+      );
+
+      expect(result).toEqual(mockDbMedicamentos);
+      expect(mockFind).toHaveBeenCalledWith(Medicamento, {
+        where: { tenantId: TENANT_ID },
+        order: { nombreComercial: 'ASC' },
+      });
     });
 
-    it('devuelve los 4 medicamentos base oficiales con los días de retiro correctos', async () => {
-      const result = await service.getMedicamentos(TENANT_ID);
+    it('consulta catalogo_padecimiento filtrado por tenantId con su relación', async () => {
+      mockFind.mockResolvedValue(mockDbPadecimientos);
+
+      const result = await service.getPadecimientos(
+        TENANT_ID,
+        managerDe(mockFind),
+      );
+
+      expect(result).toEqual(mockDbPadecimientos);
+      expect(mockFind).toHaveBeenCalledWith(Padecimiento, {
+        where: { tenantId: TENANT_ID },
+        relations: { medicamentoSugerido: true },
+        order: { nombre: 'ASC' },
+      });
+    });
+  });
+
+  describe('Catálogo de referencia cuando la finca todavía no tiene el suyo', () => {
+    it('devuelve los 4 medicamentos base con los días de retiro de Reglas-de-Negocio-Ganaderas.md', async () => {
+      mockFind.mockResolvedValue([]);
+
+      const result = await service.getMedicamentos(
+        TENANT_ID,
+        managerDe(mockFind),
+      );
 
       expect(result).toHaveLength(4);
       expect(result.map((m) => m.nombreComercial)).toEqual(
@@ -57,15 +105,19 @@ describe('SanitaryService', () => {
       expect(result[0].diasRetiroCarneDefault).toBe(4);
     });
 
-    it('devuelve los 10 padecimientos base con relaciones a medicamentos sugeridos', async () => {
-      const result = await service.getPadecimientos(TENANT_ID);
+    it('devuelve los 10 padecimientos base con su medicamento sugerido resuelto', async () => {
+      mockFind.mockResolvedValue([]);
+
+      const result = await service.getPadecimientos(
+        TENANT_ID,
+        managerDe(mockFind),
+      );
 
       expect(result).toHaveLength(10);
       expect(result.map((p) => p.nombre)).toEqual(
         PADECIMIENTOS_BASE.map((p) => p.nombre),
       );
 
-      // Verificar que mastitis sugiere Cefalexina
       const mastitis = result.find((p) => p.nombre === 'Mastitis clínica');
       expect(mastitis?.medicamentoSugerido?.nombreComercial).toBe(
         'Cefalexina 200 Intramamaria',
@@ -73,65 +125,17 @@ describe('SanitaryService', () => {
     });
   });
 
-  describe('Modo conectado a Base de Datos (con DataSource inicializado)', () => {
-    let service: SanitaryService;
-    const mockFindMed = vi.fn();
-    const mockFindPad = vi.fn();
+  describe('Los errores de base de datos ya no se disfrazan de éxito', () => {
+    it('CASO LÍMITE: un fallo de consulta se propaga, en vez de devolver 200 con el catálogo en memoria', async () => {
+      // Esta era la falla de fondo: SanitaryModule no registraba sus entidades,
+      // así que toda consulta lanzaba EntityMetadataNotFoundError, el servicio lo
+      // atrapaba con un warn y respondía 200 con UUID inventados. El endpoint
+      // jamás leyó la base y nadie se enteró.
+      mockFind.mockRejectedValue(new Error('EntityMetadataNotFoundError'));
 
-    const mockDataSource = {
-      isInitialized: true,
-      getRepository: vi.fn((entity) => {
-        if (entity === Medicamento) {
-          return { find: mockFindMed };
-        }
-        if (entity === Padecimiento) {
-          return { find: mockFindPad };
-        }
-        return {};
-      }),
-    };
-
-    beforeEach(async () => {
-      const module: TestingModule = await Test.createTestingModule({
-        providers: [
-          SanitaryService,
-          {
-            provide: DataSource,
-            useValue: mockDataSource,
-          },
-        ],
-      }).compile();
-
-      service = module.get<SanitaryService>(SanitaryService);
-    });
-
-    afterEach(() => {
-      vi.clearAllMocks();
-    });
-
-    it('consulta catalogo_medicamento en BD filtrado por tenantId', async () => {
-      mockFindMed.mockResolvedValue(mockDbMedicamentos);
-
-      const result = await service.getMedicamentos(TENANT_ID);
-
-      expect(result).toEqual(mockDbMedicamentos);
-      expect(mockFindMed).toHaveBeenCalledWith({
-        where: { tenantId: TENANT_ID },
-        order: { nombreComercial: 'ASC' },
-      });
-    });
-
-    it('consulta catalogo_padecimiento en BD filtrado por tenantId con relación eager', async () => {
-      mockFindPad.mockResolvedValue(mockDbPadecimientos);
-
-      const result = await service.getPadecimientos(TENANT_ID);
-
-      expect(result).toEqual(mockDbPadecimientos);
-      expect(mockFindPad).toHaveBeenCalledWith({
-        where: { tenantId: TENANT_ID },
-        relations: { medicamentoSugerido: true },
-        order: { nombre: 'ASC' },
-      });
+      await expect(
+        service.getMedicamentos(TENANT_ID, managerDe(mockFind)),
+      ).rejects.toThrow('EntityMetadataNotFoundError');
     });
   });
 });

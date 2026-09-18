@@ -1,0 +1,54 @@
+name: CI
+
+# Existe porque el repositorio no tenía ninguna verificación automática: siete
+# ramas y los PR #3 al #9 se mergearon sin que nada corriera el linter, el
+# compilador ni los tests. Esa ausencia es la causa mecánica de que una
+# contraseña de producción llegara a main en tres commits distintos.
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev, 'feature/**']
+
+jobs:
+  verificar:
+    name: Lint, tipos y pruebas unitarias
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # gitleaks necesita el historial para revisar los commits del PR.
+          fetch-depth: 0
+
+      - name: Detectar secretos
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Verificación de tipos
+        run: pnpm typecheck
+
+      - name: Pruebas unitarias
+        # Solo unitarias. Las de integración escriben en la base compartida del
+        # equipo y exigen ALLOW_DB_INTEGRATION_TESTS, que CI no define a propósito.
+        run: pnpm test
+
+      - name: Build de producción
+        run: pnpm build

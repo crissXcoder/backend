@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import type { EntityManager } from 'typeorm';
 import { SanitaryController } from './sanitary.controller.js';
 import { SanitaryService } from './sanitary.service.js';
 import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.interface.js';
@@ -63,22 +64,27 @@ describe('SanitaryController', () => {
     vi.clearAllMocks();
   });
 
+  // El controlador ahora pasa también el EntityManager de la transacción RLS,
+  // en vez de dejar que el servicio abra su propia conexión sin contexto.
+  const mockManager = {} as EntityManager;
+
   describe('GET /catalogos/medicamentos', () => {
     it('should return medicamentos for the authenticated user tenant', async () => {
       mockSanitaryService.getMedicamentos.mockResolvedValue(mockMedicamentos);
 
-      const result = await controller.getMedicamentos(mockUser);
+      const result = await controller.getMedicamentos(mockUser, mockManager);
 
       expect(result).toEqual(mockMedicamentos);
       expect(mockSanitaryService.getMedicamentos).toHaveBeenCalledWith(
         TENANT_ID,
+        mockManager,
       );
     });
 
     it('should return empty array when no medicamentos exist', async () => {
       mockSanitaryService.getMedicamentos.mockResolvedValue([]);
 
-      const result = await controller.getMedicamentos(mockUser);
+      const result = await controller.getMedicamentos(mockUser, mockManager);
 
       expect(result).toEqual([]);
     });
@@ -86,22 +92,21 @@ describe('SanitaryController', () => {
 
   describe('GET /catalogos/padecimientos', () => {
     it('should return padecimientos for the authenticated user tenant', async () => {
-      mockSanitaryService.getPadecimientos.mockResolvedValue(
-        mockPadecimientos,
-      );
+      mockSanitaryService.getPadecimientos.mockResolvedValue(mockPadecimientos);
 
-      const result = await controller.getPadecimientos(mockUser);
+      const result = await controller.getPadecimientos(mockUser, mockManager);
 
       expect(result).toEqual(mockPadecimientos);
       expect(mockSanitaryService.getPadecimientos).toHaveBeenCalledWith(
         TENANT_ID,
+        mockManager,
       );
     });
 
     it('should return empty array when no padecimientos exist', async () => {
       mockSanitaryService.getPadecimientos.mockResolvedValue([]);
 
-      const result = await controller.getPadecimientos(mockUser);
+      const result = await controller.getPadecimientos(mockUser, mockManager);
 
       expect(result).toEqual([]);
     });

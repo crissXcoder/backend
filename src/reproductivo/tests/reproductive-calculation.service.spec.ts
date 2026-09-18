@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { BadRequestException } from '@nestjs/common';
 import { ReproductiveCalculationService } from '../services/reproductive-calculation.service.js';
 
@@ -118,9 +118,9 @@ describe('ReproductiveCalculationService (Cálculo Puro de Hitos Veterinarios)',
       expect(() => service.calcularHitos('2026-01-01', null as any)).toThrow(
         BadRequestException,
       );
-      expect(() => service.calcularHitos('2026-01-01', undefined as any)).toThrow(
-        BadRequestException,
-      );
+      expect(() =>
+        service.calcularHitos('2026-01-01', undefined as any),
+      ).toThrow(BadRequestException);
     });
 
     it('Rechaza explícitamente con BadRequestException si diasGestacion es <= 0 o NaN', () => {
@@ -139,6 +139,79 @@ describe('ReproductiveCalculationService (Cálculo Puro de Hitos Veterinarios)',
       expect(() => service.calcularHitos('fecha-invalida', 281)).toThrow(
         BadRequestException,
       );
+    });
+  });
+
+  describe('Casos límite de aritmética de calendario', () => {
+    it('cruza correctamente el 29 de febrero de un año bisiesto', () => {
+      // 2028 es bisiesto. Del 1 de febrero + 29 días se llega al 1 de marzo,
+      // no al 29 de febrero, justamente porque febrero tiene 29 ese año.
+      const hitos = service.calcularHitos('2028-02-01', 29);
+      expect(hitos.fpp).toBe('2028-03-01');
+    });
+
+    it('cruza correctamente el cambio de año', () => {
+      const hitos = service.calcularHitos('2026-12-15', 40);
+      expect(hitos.fpp).toBe('2027-01-24');
+    });
+
+    it('la fecha de palpación cae dentro de la ventana 35-45 días que define Reglas-de-Negocio-Ganaderas.md', () => {
+      const fechaServicio = '2026-03-01';
+      const hitos = service.calcularHitos(fechaServicio, 281);
+
+      const dias =
+        (new Date(hitos.palpacionFecha).getTime() -
+          new Date(fechaServicio).getTime()) /
+        86400000;
+
+      expect(dias).toBeGreaterThanOrEqual(35);
+      expect(dias).toBeLessThanOrEqual(45);
+    });
+
+    it('el secado cae exactamente 60 días antes de la FPP, y los avisos a 15 y 3 días', () => {
+      const hitos = service.calcularHitos('2026-03-01', 281);
+      const dias = (desde: string, hasta: string) =>
+        (new Date(hasta).getTime() - new Date(desde).getTime()) / 86400000;
+
+      expect(dias(hitos.secadoFecha, hitos.fpp)).toBe(60);
+      expect(dias(hitos.avisoPartoFecha, hitos.fpp)).toBe(15);
+      expect(dias(hitos.avisoPartoUrgenteFecha, hitos.fpp)).toBe(3);
+    });
+
+    it('CASO LÍMITE: con una gestación menor a 60 días el secado queda antes del servicio, y aun así se calcula sin romper', () => {
+      const hitos = service.calcularHitos('2026-03-01', 30);
+      expect(hitos.fpp).toBe('2026-03-31');
+      expect(hitos.secadoFecha).toBe('2026-01-30'); // FPP - 60, anterior al servicio
+    });
+  });
+
+  describe('hoyLocal: la fecha "de hoy" es la de la finca, no la de UTC', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('caso normal: a mediodía UTC coincide con el día en Costa Rica', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-17T12:00:00Z'));
+      expect(service.hoyLocal()).toBe('2026-09-17');
+    });
+
+    it('CASO LÍMITE: a las 23:30 UTC todavía es el día anterior en Costa Rica (UTC-6)', () => {
+      // Este es el bug que se corrigió: usar toISOString() daba '2026-09-18',
+      // así que durante seis horas de cada día todos los diasRestantes salían
+      // corridos en uno.
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-17T23:30:00Z'));
+      expect(service.hoyLocal()).toBe('2026-09-17');
+      expect(new Date().toISOString().slice(0, 10)).toBe('2026-09-17');
+    });
+
+    it('CASO LÍMITE: a las 05:30 UTC sigue siendo el día anterior en Costa Rica', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-18T05:30:00Z'));
+      expect(service.hoyLocal()).toBe('2026-09-17');
+      // En UTC ya es el 18: ahí está la diferencia de seis horas.
+      expect(new Date().toISOString().slice(0, 10)).toBe('2026-09-18');
     });
   });
 });

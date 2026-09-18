@@ -1,6 +1,13 @@
 import { Controller, Get } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+import type { EntityManager } from 'typeorm';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
+import { CurrentEntityManager } from '../auth/decorators/current-entity-manager.decorator.js';
 import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.interface.js';
 import { SanitaryService } from './sanitary.service.js';
 import type { Medicamento } from './entities/medicamento.entity.js';
@@ -25,10 +32,15 @@ export class SanitaryController {
   @ApiOperation({
     summary: 'Obtener catálogo de medicamentos veterinarios del tenant',
   })
+  @ApiResponse({
+    status: 401,
+    description: 'Token ausente, inválido o sin claims de tenant',
+  })
   async getMedicamentos(
     @CurrentUser() user: AuthenticatedUser,
+    @CurrentEntityManager() manager: EntityManager,
   ): Promise<Medicamento[]> {
-    return this.sanitaryService.getMedicamentos(user.tenantId);
+    return this.sanitaryService.getMedicamentos(user.tenantId, manager);
   }
 
   /**
@@ -38,11 +50,17 @@ export class SanitaryController {
    */
   @Get('padecimientos')
   @ApiOperation({
-    summary: 'Obtener catálogo de padecimientos del tenant con fármaco sugerido',
+    summary:
+      'Obtener catálogo de padecimientos del tenant con fármaco sugerido',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Token ausente, inválido o sin claims de tenant',
   })
   async getPadecimientos(
     @CurrentUser() user: AuthenticatedUser,
+    @CurrentEntityManager() manager: EntityManager,
   ): Promise<Padecimiento[]> {
-    return this.sanitaryService.getPadecimientos(user.tenantId);
+    return this.sanitaryService.getPadecimientos(user.tenantId, manager);
   }
 }

@@ -1,29 +1,26 @@
-import {
-  IsDateString,
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-  IsUUID,
-} from 'class-validator';
+import { IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { EsFechaDeEvento } from './validators/fecha-evento.validator.js';
 
 export class RegistrarSecadoDto {
   @ApiProperty({
-    description: 'Fecha en que se realizó la suspensión real del ordeño (YYYY-MM-DD)',
+    description:
+      'Fecha de la suspensión real del ordeño (YYYY-MM-DD). No puede ser futura; puede diferir de la fecha de secado calculada.',
     example: '2026-08-10',
   })
-  @IsDateString(
-    {},
-    { message: 'La fecha del secado debe tener formato válido (YYYY-MM-DD)' },
-  )
-  @IsNotEmpty({ message: 'La fecha del secado es requerida' })
+  @EsFechaDeEvento('del secado')
   fechaEvento: string;
 
   @ApiPropertyOptional({
-    description: 'Observaciones o tratamiento de sellado/terapia de secado intramamaria aplicada',
-    example: 'Aplicada infusión de secado en los 4 cuartos + sellador de pezones',
+    description:
+      'Observaciones o tratamiento de sellado/terapia de secado intramamaria aplicada',
+    example:
+      'Aplicada infusión de secado en los 4 cuartos + sellador de pezones',
   })
   @IsString({ message: 'Las notas deben ser texto' })
+  @MaxLength(2000, {
+    message: 'Las notas no pueden superar los 2000 caracteres',
+  })
   @IsOptional()
   notas?: string;
 
