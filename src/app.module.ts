@@ -7,9 +7,9 @@ import { CatalogosModule } from './catalogos/catalogos.module.js';
 import { AnimalesModule } from './animales/animales.module.js';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { PesajesModule } from './pesajes/pesajes.module.js';
-import { ServiciosModule } from './servicios/servicios.module.js';
 import { TratamientosModule } from './tratamientos/tratamientos.module.js';
 import { SanitaryModule } from './sanitary/sanitary.module.js';
+import { PotrerosModule } from './potreros/potreros.module.js';
 import { ReproductivoModule } from './reproductivo/reproductivo.module.js';
 
 @Module({
@@ -32,9 +32,9 @@ import { ReproductivoModule } from './reproductivo/reproductivo.module.js';
     CatalogosModule,
     AnimalesModule,
     PesajesModule,
-    ServiciosModule,
     TratamientosModule,
     SanitaryModule,
+    PotrerosModule,
     ReproductivoModule,
   ],
   controllers: [AppController],

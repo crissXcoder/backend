@@ -16,12 +16,12 @@ async function seed() {
     console.log('Using tenant_id:', tenantId);
 
     const razas = [
-      { nombre: 'Brahman', diasGestacion: 290 },
-      { nombre: 'Gyr', diasGestacion: 290 },
-      { nombre: 'Holstein', diasGestacion: 280 },
-      { nombre: 'Jersey', diasGestacion: 280 },
-      { nombre: 'Angus', diasGestacion: 283 },
-      { nombre: 'Otra', diasGestacion: 285 }
+      { nombre: 'Holstein', diasGestacion: 281 },
+      { nombre: 'Jersey', diasGestacion: 279 },
+      { nombre: 'Pardo Suizo', diasGestacion: 290 },
+      { nombre: 'Brahman', diasGestacion: 293 },
+      { nombre: 'Nelore', diasGestacion: 293 },
+      { nombre: 'Girolando', diasGestacion: 290 }
     ];
     
     for (const r of razas) {

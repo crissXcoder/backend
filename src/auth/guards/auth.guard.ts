@@ -72,11 +72,11 @@ export class AuthGuard implements CanActivate {
     let tenantId = (payload['tenant_id'] || (appMetadata && appMetadata['tenant_id'])) as string | undefined;
     let rol = (payload['rol'] || (appMetadata && appMetadata['rol'])) as RolUsuario | undefined;
 
-    // FALLBACK TEMPORAL PARA DESARROLLO (mientras no esté el Hook de Supabase)
     if (!tenantId || !rol) {
-      console.warn('AuthGuard: Faltan claims en JWT. Usando default tenant y rol propietario.');
-      tenantId = '00000000-0000-0000-0000-000000000001'; // Default tenant from seed
-      rol = 'propietario';
+      console.error('AuthGuard: Faltan claims en JWT (tenant_id o rol).');
+      throw new UnauthorizedException(
+        'El token de autenticación no contiene claims de tenant_id o rol.',
+      );
     }
 
     if (!ROLES_VALIDOS.includes(rol)) {

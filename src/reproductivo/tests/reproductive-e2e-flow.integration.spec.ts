@@ -11,6 +11,7 @@ import { EventoServicio } from '../entities/evento-servicio.entity.js';
 import { EventoDiagnostico } from '../entities/evento-diagnostico.entity.js';
 import { EventoParto } from '../entities/evento-parto.entity.js';
 import { EventoSecado } from '../entities/evento-secado.entity.js';
+import { Potrero } from '../../potreros/entities/potrero.entity.js';
 
 describe('Test End-to-End Flujo Reproductivo Completo (Base Real Supabase)', () => {
   let dataSource: DataSource;
@@ -34,6 +35,7 @@ describe('Test End-to-End Flujo Reproductivo Completo (Base Real Supabase)', () 
         EventoDiagnostico,
         EventoParto,
         EventoSecado,
+        Potrero,
       ],
     });
     await dataSource.initialize();

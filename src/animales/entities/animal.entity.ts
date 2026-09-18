@@ -1,5 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, Unique } from 'typeorm';
 import { CatalogoRaza } from '../../catalogos/entities/catalogo-raza.entity.js';
+import { Potrero } from '../../potreros/entities/potrero.entity.js';
 
 @Entity('animal')
 @Unique(['tenantId', 'areteInterno'])
@@ -35,8 +36,12 @@ export class Animal {
   @Column({ type: 'text' })
   categoria: string;
 
-  @Column({ type: 'text', nullable: true })
-  potrero: string | null;
+  @Column({ name: 'potrero_id', type: 'uuid', nullable: true })
+  potreroId: string | null;
+
+  @ManyToOne(() => Potrero, potrero => potrero.animales)
+  @JoinColumn({ name: 'potrero_id' })
+  potrero: Potrero | null;
 
   @Column({ name: 'fecha_nacimiento', type: 'date', nullable: true })
   fechaNacimiento: string | null; // Date as string 'YYYY-MM-DD'

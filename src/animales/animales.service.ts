@@ -1,21 +1,14 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager } from 'typeorm';
 import { Animal } from './entities/animal.entity.js';
 import { DocumentoAnimal } from './entities/documento-animal.entity.js';
 
 @Injectable()
 export class AnimalesService {
-  constructor(
-    @InjectRepository(Animal)
-    private readonly animalRepository: Repository<Animal>,
-    @InjectRepository(DocumentoAnimal)
-    private readonly documentoRepository: Repository<DocumentoAnimal>,
-  ) {}
-
-  async findAll(tenantId: string, query: any) {
-    const qb = this.animalRepository.createQueryBuilder('animal')
+  async findAll(tenantId: string, query: any, manager: EntityManager) {
+    const qb = manager.createQueryBuilder(Animal, 'animal')
       .leftJoinAndSelect('animal.raza', 'raza')
+      .leftJoinAndSelect('animal.potrero', 'potrero')
       .where('animal.tenant_id = :tenantId', { tenantId });
 
     if (query.activo !== undefined) {
@@ -35,10 +28,10 @@ export class AnimalesService {
     return qb.getMany();
   }
 
-  async findOne(id: string, tenantId: string) {
-    const animal = await this.animalRepository.findOne({
+  async findOne(id: string, tenantId: string, manager: EntityManager) {
+    const animal = await manager.findOne(Animal, {
       where: { id, tenantId },
-      relations: { raza: true, madre: true, padre: true },
+      relations: { raza: true, madre: true, padre: true, potrero: true },
     });
 
     if (!animal) {
@@ -48,7 +41,7 @@ export class AnimalesService {
     return animal;
   }
 
-  async create(tenantId: string, createAnimalDto: any) {
+  async create(tenantId: string, createAnimalDto: any, manager: EntityManager) {
     // Sanitizar campos vacíos que causan error en la base de datos
     const payload = { ...createAnimalDto };
     if (payload.madreId === '') payload.madreId = null;
@@ -57,13 +50,14 @@ export class AnimalesService {
     if (payload.valorCompraCrc === '') payload.valorCompraCrc = null;
     if (payload.fechaNacimiento === '') payload.fechaNacimiento = null;
     if (payload.fechaCompra === '') payload.fechaCompra = null;
+    if (payload.potreroId === '') payload.potreroId = null;
 
     try {
-      const animal = this.animalRepository.create({
+      const animal = manager.create(Animal, {
         ...payload,
         tenantId,
       });
-      return await this.animalRepository.save(animal);
+      return await manager.save(animal);
     } catch (error: any) {
       if (error.code === '23505') { // Unique violation
         throw new BadRequestException('Ya existe un animal con ese arete interno.');
@@ -72,7 +66,7 @@ export class AnimalesService {
     }
   }
 
-  async update(id: string, tenantId: string, updateAnimalDto: any) {
+  async update(id: string, tenantId: string, updateAnimalDto: any, manager: EntityManager) {
     const payload = { ...updateAnimalDto };
     if (payload.madreId === '') payload.madreId = null;
     if (payload.padreId === '') payload.padreId = null;
@@ -80,12 +74,13 @@ export class AnimalesService {
     if (payload.valorCompraCrc === '') payload.valorCompraCrc = null;
     if (payload.fechaNacimiento === '') payload.fechaNacimiento = null;
     if (payload.fechaCompra === '') payload.fechaCompra = null;
+    if (payload.potreroId === '') payload.potreroId = null;
 
-    const animal = await this.findOne(id, tenantId);
-    this.animalRepository.merge(animal, payload);
+    const animal = await this.findOne(id, tenantId, manager);
+    manager.merge(Animal, animal, payload);
     
     try {
-      return await this.animalRepository.save(animal);
+      return await manager.save(animal);
     } catch (error: any) {
       if (error.code === '23505') { // Unique violation
         throw new BadRequestException('Ya existe un animal con ese arete interno.');
@@ -94,8 +89,8 @@ export class AnimalesService {
     }
   }
 
-  async darDeBaja(id: string, tenantId: string, bajaDto: any) {
-    const animal = await this.findOne(id, tenantId);
+  async darDeBaja(id: string, tenantId: string, bajaDto: any, manager: EntityManager) {
+    const animal = await this.findOne(id, tenantId, manager);
     
     if (!animal.activo) {
       throw new BadRequestException('El animal ya está de baja.');
@@ -108,30 +103,30 @@ export class AnimalesService {
     animal.precioVentaCrc = bajaDto.precioVentaCrc;
     animal.pesoFinalKg = bajaDto.pesoFinalKg;
 
-    return await this.animalRepository.save(animal);
+    return await manager.save(animal);
   }
 
-  async getDocumentos(animalId: string, tenantId: string) {
+  async getDocumentos(animalId: string, tenantId: string, manager: EntityManager) {
     // Verificar que el animal existe y pertenece al tenant
-    await this.findOne(animalId, tenantId);
+    await this.findOne(animalId, tenantId, manager);
     
-    return this.documentoRepository.find({
+    return manager.find(DocumentoAnimal, {
       where: { animalId, tenantId },
       order: { createdAt: 'DESC' }
     });
   }
 
-  async createDocumento(animalId: string, tenantId: string, docDto: any) {
+  async createDocumento(animalId: string, tenantId: string, docDto: any, manager: EntityManager) {
     // Verificar que el animal existe y pertenece al tenant
-    await this.findOne(animalId, tenantId);
+    await this.findOne(animalId, tenantId, manager);
 
-    const doc = this.documentoRepository.create({
+    const doc = manager.create(DocumentoAnimal, {
       tenantId,
       animalId,
       tipo: docDto.tipo,
       archivoUrl: docDto.archivoUrl,
     });
     
-    return this.documentoRepository.save(doc);
+    return manager.save(doc);
   }
 }
