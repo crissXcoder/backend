@@ -165,6 +165,7 @@ export class ReproductiveStateService {
               secadoFecha: servicio.secadoFecha,
               avisoPartoFecha: servicio.avisoPartoFecha,
               avisoPartoUrgenteFecha: servicio.avisoPartoUrgenteFecha,
+              notas: evento.notas,
             };
           }
           break;

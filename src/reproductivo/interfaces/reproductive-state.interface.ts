@@ -24,6 +24,7 @@ export interface ResumenServicioActivo {
   secadoFecha: string;
   avisoPartoFecha: string;
   avisoPartoUrgenteFecha: string;
+  notas?: string | null;
 }
 
 export interface ResumenDiagnosticoActivo {
