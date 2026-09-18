@@ -327,12 +327,15 @@ categoría para el aviso urgente (o usar `urgente` para resaltar visualmente la 
 
 ### Los cuatro
 
-**27. Nav "Reproducción" del Sidebar apunta a un link muerto**
+**27. ~~Nav "Reproducción" del Sidebar apunta a un link muerto~~ — resuelto**
 
-`components/layout/Sidebar.tsx:34` — `{ name: 'Reproducción', href: '#', icon: Clock }`. La pestaña
-reproductiva ya existe dentro de `/hato/[id]`, pero no hay una ruta de calendario/listado reproductivo
-de toda la finca todavía. Si el dashboard (punto 24) termina cubriendo eso, este ítem del menú puede
-apuntar ahí o quitarse; si no, hace falta decidir a qué pantalla debería llevar.
+`components/layout/Sidebar.tsx:34` apuntaba a `href: '#'`. Ahora apunta a `/reproductivo`, ruta nueva:
+`app/(dashboard)/reproductivo/page.tsx` — calendario reproductivo de toda la finca sobre
+`GET /reproductivo/proximos-eventos` (`useProximosEventosFinca` en `lib/hooks/use-reproductivo.ts`),
+con tarjetas de resumen (hitos en ventana, avisos urgentes, vencidos), filtro por tipo de hito, selector
+de ventana (30/60/90/180 días) y enlace directo a la ficha de cada animal. `lib/supabase/middleware.ts:55`
+ya protegía `/reproductivo`, así que no hizo falta tocar el proxy. Comparte clave de query con el feed del
+dashboard de Karla (punto 24): registrar un evento desde cualquier pestaña actualiza ambas pantallas solo.
 
 ---
 
